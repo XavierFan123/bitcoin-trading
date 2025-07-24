@@ -19,37 +19,46 @@
         if (!response.ok) throw new Error(`API请求失败: ${response.status}`);
         const data = await response.json();
         const historical = data.historical || [];
+        // Filter out entries where close price is null or undefined
         return historical.map(item => ({
           date: new Date(item.date),
           price: item.close
-        })).reverse();
+        })).filter(item => item.price != null).reverse(); // Ensure price is not null
       } catch (err) {
-        console.error(err);
+        console.error("数据加载错误:", err);
         return [];
       }
     }
 
     function calculateIndicators(data) {
-  return data.map((row, index, arr) => {
-    let BTC20MA = null;
-    if (index >= 19) {
-      const prices = arr.slice(index - 19, index + 1).map(r => r.price).filter(p => p != null);
-      if (prices.length === 20) {
-        BTC20MA = prices.reduce((sum, p) => sum + p, 0) / 20;
-      }
+      return data.map((row, index, arr) => {
+        let BTC20MA = null;
+        if (index >= 19) {
+          // Ensure all 20 prices are valid numbers
+          const prices = arr.slice(index - 19, index + 1).map(r => r.price);
+          if (prices.length === 20 && prices.every(p => typeof p === 'number' && p != null)) {
+            BTC20MA = prices.reduce((sum, p) => sum + p, 0) / 20;
+          }
+        }
+        const prevBTC20MA = index > 0 && arr[index - 1].BTC20MA != null ? arr[index - 1].BTC20MA : null; // Get previous MA directly
+        let BTC20MAtrend = '未知';
+        if (BTC20MA != null && prevBTC20MA != null) {
+          BTC20MAtrend = BTC20MA > prevBTC20MA ? '上升' : '下降';
+        } else if (BTC20MA != null && index === 0) { // For the very first calculated MA, there's no trend yet
+            BTC20MAtrend = '无'; // Or leave as '未知'
+        }
+        return { ...row, BTC20MA, BTC20MAtrend };
+      });
     }
-    const prevBTC20MA = index > 19 ? arr[index - 1].BTC20MA : BTC20MA;
-    let BTC20MAtrend = '未知';
-    if (BTC20MA != null && prevBTC20MA != null) {
-      BTC20MAtrend = BTC20MA > prevBTC20MA ? '上升' : '下降';
-    }
-    return { ...row, BTC20MA, BTC20MAtrend };
-  });
-}
 
     function generateSignals(data) {
       return data.map((row, index, arr) => {
-        if (index === 0) return { ...row, Signal: '', POSITION: '空仓' };
+        // Initialize position from previous row if available, otherwise '空仓'
+        let currentPosition = index > 0 ? arr[index - 1].POSITION : '空仓';
+        let signal = '';
+
+        if (index === 0) return { ...row, Signal: signal, POSITION: currentPosition };
+
         const prevRow = arr[index - 1];
 
         const B2 = row.price;
@@ -58,42 +67,49 @@
         const B3 = prevRow.price;
         const D3 = prevRow.BTC20MA;
         const F3 = prevRow.BTC20MAtrend;
-        const I3 = prevRow.POSITION;
+        const I3 = prevRow.POSITION; // This refers to the previous day's position
 
-        let signal = '';
-
-        if (
-          D2 != null && B2 != null &&
-          D2 > B2 &&
-          F2 === '下降' &&
-          (
-            (B2 < D2 * 0.99 && B3 >= D3) ||
-            (I3 === '持有' && B2 < D2 && F3 === '上升')
-          )
-        ) {
-          signal = '卖出';
+        // Ensure all necessary values are available for signal generation
+        if (D2 != null && B2 != null && D3 != null && B3 != null && F2 !== '未知' && F3 !== '未知') {
+            // Sell signal logic
+            if (
+                D2 > B2 &&
+                F2 === '下降' &&
+                (
+                    (B2 < D2 * 0.99 && B3 >= D3) ||
+                    (I3 === '持有' && B2 < D2 && F3 === '上升') // This might be a sell condition from a previous holding
+                )
+            ) {
+                signal = '卖出';
+            }
+            // Buy signal logic
+            else if (
+                D2 < B2 &&
+                F2 === '上升' &&
+                (
+                    (B2 > D2 * 1.01 && B3 <= D3) ||
+                    (I3 === '空仓' && B2 > D2 && F3 === '下降') // This might be a buy condition when currently empty
+                )
+            ) {
+                signal = '买入';
+            }
         }
-        else if (
-          D2 != null && B2 != null &&
-          D2 < B2 &&
-          F2 === '上升' &&
-          (
-            (B2 > D2 * 1.01 && B3 <= D3) ||
-            (I3 === '空仓' && B2 > D2 && F3 === '下降')
-          )
-        ) {
-          signal = '买入';
+
+        // Update current position based on signal
+        if (signal === '买入') {
+            currentPosition = '持有';
+        } else if (signal === '卖出') {
+            currentPosition = '空仓';
         }
+        // If no signal, position remains the same as the previous day
+        // This is handled by currentPosition being initialized from prevRow.POSITION
 
-        const position = signal === '买入' ? '持有' :
-                         signal === '卖出' ? '空仓' :
-                         prevRow.POSITION;
-
-        return { ...row, Signal: signal, POSITION: position };
+        return { ...row, Signal: signal, POSITION: currentPosition };
       });
     }
 
     function formatNumber(num) {
+      if (num == null) return 'N/A'; // Handle null or undefined numbers
       if (num >= 1e6) return (num / 1e6).toFixed(2) + 'M';
       if (num >= 1e3) return (num / 1e3).toFixed(2) + 'K';
       return num.toFixed(2);
@@ -104,8 +120,10 @@
       root.innerHTML = '<div class="text-center text-xl text-gray-600 mt-10">📊 正在加载数据...</div>';
 
       const rawData = await loadData();
-      if (rawData.length === 0) {
-        root.innerHTML = '<div class="text-center text-red-600 mt-10">⚠️ 无法加载数据，请检查API或网络连接</div>';
+      if (rawData.length < 20) { // Need at least 20 data points for 20-day MA
+        root.innerHTML = `
+          <div class="text-center text-red-600 mt-10">⚠️ 无法加载足够数据进行分析。需要至少20天的数据，当前只有 ${rawData.length} 天。请检查API或稍后再试。</div>
+        `;
         return;
       }
 
@@ -115,16 +133,16 @@
       const latest = dataWithSignals[dataWithSignals.length - 1] || {};
       const currentPosition = latest.POSITION || '未知';
       const latestPrice = latest.price || 0;
-      const latestChange = dataWithSignals.length > 1
+      const latestChange = dataWithSignals.length > 1 && dataWithSignals[dataWithSignals.length - 2].price !== 0
         ? ((latestPrice - dataWithSignals[dataWithSignals.length - 2].price) / dataWithSignals[dataWithSignals.length - 2].price * 100).toFixed(2)
-        : 0;
+        : 'N/A';
       const latest20MA = latest.BTC20MA || 0;
       const latestTrend = latest.BTC20MAtrend || '未知';
-      const pricePosition = (latestPrice && latest20MA)
+      const pricePosition = (latestPrice != null && latest20MA != null && latest20MA !== 0) // Ensure MA is not zero for division check
         ? (latestPrice > latest20MA ? '高于20日均线' : '低于20日均线')
         : '未知';
 
-      const recentSignals = dataWithSignals.filter(r => r.Signal).slice(-5).reverse();
+      const recentSignals = dataWithSignals.filter(r => r.Signal).slice(-5).reverse(); // Display up to 5 recent signals
 
       root.innerHTML = `
         <div class="bg-white shadow-xl rounded-lg p-8">
@@ -152,13 +170,13 @@
             <div class="bg-gray-50 rounded p-4">
               <h2 class="text-lg font-semibold text-gray-700 mb-2">🔍 近期信号</h2>
               <ul class="space-y-1">
-                ${recentSignals.map(s => `
+                ${recentSignals.length > 0 ? recentSignals.map(s => `
                   <li class="flex justify-between border-b py-1">
                     <span>${s.date.toLocaleDateString()}</span>
                     <span class="${s.Signal === '买入' ? 'text-green-600' : 'text-red-600'}">${s.Signal}</span>
                     <span>$${formatNumber(s.price)}</span>
                   </li>
-                `).join('')}
+                `).join('') : '<li class="text-gray-500">暂无近期交易信号</li>'}
               </ul>
             </div>
           </div>
