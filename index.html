@@ -53,26 +53,52 @@
     }
 
     function generateSignals(data) {
-      return data.map((row, index, arr) => {
-        if (index === 0) return { ...row, Signal: '', POSITION: '空仓' };
-        const prevRow = arr[index - 1];
-        const B2 = row.price, D2 = row.BTC20MA, F2 = row.BTC20MAtrend;
-        const B3 = prevRow.price, D3 = prevRow.BTC20MA, F3 = prevRow.BTC20MAtrend;
-        const I3 = prevRow.POSITION;
-
-        let signal = '';
-        if (D2 && D2 > B2 && F2 === '下降' &&
-            ((B2 < D2 * 0.99 && B3 >= D3) || (I3 === '持有' && B2 < D2 && F3 === '上升'))) {
-          signal = '卖出';
-        }
-        else if (D2 && D2 < B2 && F2 === '上升' &&
-            ((B2 > D2 * 1.01 && B3 <= D3) || (I3 === '空仓' && B2 > D2 && F3 === '下降'))) {
-          signal = '买入';
-        }
-        const position = signal === '买入' ? '持有' : signal === '卖出' ? '空仓' : I3;
-        return { ...row, Signal: signal, POSITION: position };
-      });
+  return data.map((row, index, arr) => {
+    if (index === 0) {
+      return { ...row, Signal: '', POSITION: '空仓' };
     }
+    const prevRow = arr[index - 1];
+
+    const B2 = row.price;
+    const D2 = row.BTC20MA;
+    const F2 = row.BTC20MAtrend;
+    const B3 = prevRow.price;
+    const D3 = prevRow.BTC20MA;
+    const F3 = prevRow.BTC20MAtrend;
+    const I3 = prevRow.POSITION;
+
+    let signal = '';
+
+    if (
+      D2 != null && B2 != null &&
+      D2 > B2 &&
+      F2 === '下降' &&
+      (
+        (B2 < D2 * (1 - 0.01) && B3 >= D3) ||
+        (I3 === '持有' && B2 < D2 && F3 === '上升')
+      )
+    ) {
+      signal = '卖出';
+    }
+    else if (
+      D2 != null && B2 != null &&
+      D2 < B2 &&
+      F2 === '上升' &&
+      (
+        (B2 > D2 * (1 + 0.01) && B3 <= D3) ||
+        (I3 === '空仓' && B2 > D2 && F3 === '下降')
+      )
+    ) {
+      signal = '买入';
+    }
+
+    const position = signal === '买入' ? '持有' :
+                     signal === '卖出' ? '空仓' :
+                     prevRow.POSITION;
+
+    return { ...row, Signal: signal, POSITION: position };
+  });
+}
 
     function formatNumber(num) {
       if (num >= 1e6) return (num / 1e6).toFixed(2) + 'M';
