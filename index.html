@@ -14,102 +14,124 @@
   <script>
     async function loadData() {
       const apiUrl = 'https://financialmodelingprep.com/api/v3/historical-price-full/BTCUSD?timeseries=900&apikey=cKlA3lVOMxMjg4hJsC0cn1YAIUu1Hk8P';
+      console.log("Attempting to load data from:", apiUrl);
       try {
         const response = await fetch(apiUrl);
-        if (!response.ok) throw new Error(`API请求失败: ${response.status}`);
+        if (!response.ok) {
+          console.error(`API请求失败: ${response.status} - ${response.statusText}`);
+          throw new Error(`API请求失败: ${response.status}`);
+        }
         const data = await response.json();
+        console.log("Raw API response data:", data);
+
         const historical = data.historical || [];
-        // Filter out entries where close price is null or undefined
-        return historical.map(item => ({
+        console.log("Historical data array length (before filtering):", historical.length);
+
+        const processedData = historical.map(item => ({
           date: new Date(item.date),
           price: item.close
         })).filter(item => item.price != null).reverse(); // Ensure price is not null
+
+        console.log("Historical data length (after filtering for null prices and reversing):", processedData.length);
+        if (processedData.length === 0) {
+            console.warn("Processed historical data is empty. No valid price data found.");
+        }
+        return processedData;
       } catch (err) {
-        console.error("数据加载错误:", err);
+        console.error("数据加载错误 (loadData function):", err);
         return [];
       }
     }
 
     function calculateIndicators(data) {
-      return data.map((row, index, arr) => {
+      console.log("Starting calculateIndicators with data length:", data.length);
+      const dataWithIndicators = data.map((row, index, arr) => {
         let BTC20MA = null;
         if (index >= 19) {
-          // Ensure all 20 prices are valid numbers
           const prices = arr.slice(index - 19, index + 1).map(r => r.price);
+          // Check if all 20 prices are valid numbers
           if (prices.length === 20 && prices.every(p => typeof p === 'number' && p != null)) {
             BTC20MA = prices.reduce((sum, p) => sum + p, 0) / 20;
+          } else {
+            // console.log(`Skipping MA calculation at index ${index} due to invalid prices or insufficient count. Prices:`, prices);
           }
         }
-        const prevBTC20MA = index > 0 && arr[index - 1].BTC20MA != null ? arr[index - 1].BTC20MA : null; // Get previous MA directly
+        const prevBTC20MA = index > 0 && arr[index - 1].BTC20MA != null ? arr[index - 1].BTC20MA : null;
         let BTC20MAtrend = '未知';
         if (BTC20MA != null && prevBTC20MA != null) {
           BTC20MAtrend = BTC20MA > prevBTC20MA ? '上升' : '下降';
-        } else if (BTC20MA != null && index === 0) { // For the very first calculated MA, there's no trend yet
-            BTC20MAtrend = '无'; // Or leave as '未知'
+        } else if (BTC20MA != null && index === 0) {
+            // This case might not occur often with index >= 19 for MA, but good for robustness
+            BTC20MAtrend = '无';
         }
         return { ...row, BTC20MA, BTC20MAtrend };
       });
+      console.log("First 25 data points with MA and trend:", dataWithIndicators.slice(0, 25)); // Log a subset for inspection
+      return dataWithIndicators;
     }
 
     function generateSignals(data) {
-      return data.map((row, index, arr) => {
-        // Initialize position from previous row if available, otherwise '空仓'
-        let currentPosition = index > 0 ? arr[index - 1].POSITION : '空仓';
-        let signal = '';
+        console.log("Starting generateSignals with data length:", data.length);
+        const dataWithSignals = data.map((row, index, arr) => {
+            let currentPosition = index > 0 ? arr[index - 1].POSITION : '空仓';
+            let signal = '';
 
-        if (index === 0) return { ...row, Signal: signal, POSITION: currentPosition };
-
-        const prevRow = arr[index - 1];
-
-        const B2 = row.price;
-        const D2 = row.BTC20MA;
-        const F2 = row.BTC20MAtrend;
-        const B3 = prevRow.price;
-        const D3 = prevRow.BTC20MA;
-        const F3 = prevRow.BTC20MAtrend;
-        const I3 = prevRow.POSITION; // This refers to the previous day's position
-
-        // Ensure all necessary values are available for signal generation
-        if (D2 != null && B2 != null && D3 != null && B3 != null && F2 !== '未知' && F3 !== '未知') {
-            // Sell signal logic
-            if (
-                D2 > B2 &&
-                F2 === '下降' &&
-                (
-                    (B2 < D2 * 0.99 && B3 >= D3) ||
-                    (I3 === '持有' && B2 < D2 && F3 === '上升') // This might be a sell condition from a previous holding
-                )
-            ) {
-                signal = '卖出';
+            if (index === 0) {
+                return { ...row, Signal: signal, POSITION: currentPosition };
             }
-            // Buy signal logic
-            else if (
-                D2 < B2 &&
-                F2 === '上升' &&
-                (
-                    (B2 > D2 * 1.01 && B3 <= D3) ||
-                    (I3 === '空仓' && B2 > D2 && F3 === '下降') // This might be a buy condition when currently empty
-                )
-            ) {
-                signal = '买入';
+
+            const prevRow = arr[index - 1];
+
+            const B2 = row.price;
+            const D2 = row.BTC20MA;
+            const F2 = row.BTC20MAtrend;
+            const B3 = prevRow.price;
+            const D3 = prevRow.BTC20MA;
+            const F3 = prevRow.BTC20MAtrend;
+            const I3 = prevRow.POSITION;
+
+            // Ensure all necessary values are available and meaningful for signal generation
+            if (D2 != null && B2 != null && D3 != null && B3 != null && F2 !== '未知' && F3 !== '未知') {
+                // Sell signal logic
+                if (
+                    D2 > B2 &&
+                    F2 === '下降' &&
+                    (
+                        (B2 < D2 * 0.99 && B3 >= D3) ||
+                        (I3 === '持有' && B2 < D2 && F3 === '上升')
+                    )
+                ) {
+                    signal = '卖出';
+                }
+                // Buy signal logic
+                else if (
+                    D2 < B2 &&
+                    F2 === '上升' &&
+                    (
+                        (B2 > D2 * 1.01 && B3 <= D3) ||
+                        (I3 === '空仓' && B2 > D2 && F3 === '下降')
+                    )
+                ) {
+                    signal = '买入';
+                }
+            } else {
+                // console.log(`Skipping signal generation at index ${index} due to missing or unknown data. D2:${D2}, B2:${B2}, D3:${D3}, B3:${B3}, F2:${F2}, F3:${F3}`);
             }
-        }
 
-        // Update current position based on signal
-        if (signal === '买入') {
-            currentPosition = '持有';
-        } else if (signal === '卖出') {
-            currentPosition = '空仓';
-        }
-        // If no signal, position remains the same as the previous day
-        // This is handled by currentPosition being initialized from prevRow.POSITION
+            if (signal === '买入') {
+                currentPosition = '持有';
+            } else if (signal === '卖出') {
+                currentPosition = '空仓';
+            }
 
-        return { ...row, Signal: signal, POSITION: currentPosition };
-      });
+            return { ...row, Signal: signal, POSITION: currentPosition };
+        });
+        console.log("Last 10 data points with signals:", dataWithSignals.slice(-10)); // Log the last few for recent signals
+        return dataWithSignals;
     }
 
     function formatNumber(num) {
-      if (num == null) return 'N/A'; // Handle null or undefined numbers
+      if (num == null || isNaN(num)) return 'N/A'; // Handle null, undefined or NaN numbers
       if (num >= 1e6) return (num / 1e6).toFixed(2) + 'M';
       if (num >= 1e3) return (num / 1e3).toFixed(2) + 'K';
       return num.toFixed(2);
@@ -118,12 +140,14 @@
     async function renderDashboard() {
       const root = document.getElementById('root');
       root.innerHTML = '<div class="text-center text-xl text-gray-600 mt-10">📊 正在加载数据...</div>';
+      console.log("Dashboard rendering started.");
 
       const rawData = await loadData();
-      if (rawData.length < 20) { // Need at least 20 data points for 20-day MA
+      if (rawData.length < 20) {
         root.innerHTML = `
-          <div class="text-center text-red-600 mt-10">⚠️ 无法加载足够数据进行分析。需要至少20天的数据，当前只有 ${rawData.length} 天。请检查API或稍后再试。</div>
+          <div class="text-center text-red-600 mt-10">⚠️ 无法加载足够数据进行分析。需要至少20天的数据，当前只有 ${rawData.length} 天。请检查API密钥、API服务状态或稍后再试。</div>
         `;
+        console.error(`Insufficient data for analysis: ${rawData.length} days found, 20 required.`);
         return;
       }
 
@@ -136,13 +160,15 @@
       const latestChange = dataWithSignals.length > 1 && dataWithSignals[dataWithSignals.length - 2].price !== 0
         ? ((latestPrice - dataWithSignals[dataWithSignals.length - 2].price) / dataWithSignals[dataWithSignals.length - 2].price * 100).toFixed(2)
         : 'N/A';
-      const latest20MA = latest.BTC20MA || 0;
+      const latest20MA = latest.BTC20MA; // Keep as null if not calculated
       const latestTrend = latest.BTC20MAtrend || '未知';
-      const pricePosition = (latestPrice != null && latest20MA != null && latest20MA !== 0) // Ensure MA is not zero for division check
+      const pricePosition = (latestPrice != null && latest20MA != null && latest20MA !== 0)
         ? (latestPrice > latest20MA ? '高于20日均线' : '低于20日均线')
         : '未知';
 
-      const recentSignals = dataWithSignals.filter(r => r.Signal).slice(-5).reverse(); // Display up to 5 recent signals
+      const recentSignals = dataWithSignals.filter(r => r.Signal).slice(-5).reverse();
+      console.log("Recent signals found:", recentSignals);
+
 
       root.innerHTML = `
         <div class="bg-white shadow-xl rounded-lg p-8">
@@ -223,10 +249,11 @@
           }
         }
       });
+      console.log("Dashboard rendering complete.");
     }
 
     renderDashboard();
-    setInterval(renderDashboard, 5 * 60 * 1000); // 每5分钟自动刷新
+    setInterval(renderDashboard, 5 * 60 * 1000); // Auto refresh every 5 minutes
   </script>
 
 </body>
