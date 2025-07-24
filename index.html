@@ -30,20 +30,22 @@
     }
 
     function calculateIndicators(data) {
-      return data.map((row, index, arr) => {
-        let BTC20MA = null;
-        if (index >= 19) {
-          const prices = arr.slice(index - 19, index + 1).map(r => r.price);
-          BTC20MA = prices.reduce((sum, p) => sum + p, 0) / 20;
-        }
-        const prevBTC20MA = index > 19 ? arr[index - 1].BTC20MA : BTC20MA;
-        let BTC20MAtrend = '未知';
-        if (BTC20MA != null && prevBTC20MA != null) {
-          BTC20MAtrend = BTC20MA > prevBTC20MA ? '上升' : '下降';
-        }
-        return { ...row, BTC20MA, BTC20MAtrend };
-      });
+  return data.map((row, index, arr) => {
+    let BTC20MA = null;
+    if (index >= 19) {
+      const prices = arr.slice(index - 19, index + 1).map(r => r.price).filter(p => p != null);
+      if (prices.length === 20) {
+        BTC20MA = prices.reduce((sum, p) => sum + p, 0) / 20;
+      }
     }
+    const prevBTC20MA = index > 19 ? arr[index - 1].BTC20MA : BTC20MA;
+    let BTC20MAtrend = '未知';
+    if (BTC20MA != null && prevBTC20MA != null) {
+      BTC20MAtrend = BTC20MA > prevBTC20MA ? '上升' : '下降';
+    }
+    return { ...row, BTC20MA, BTC20MAtrend };
+  });
+}
 
     function generateSignals(data) {
       return data.map((row, index, arr) => {
