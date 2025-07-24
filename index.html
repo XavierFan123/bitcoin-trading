@@ -6,10 +6,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>BTC交易信号分析</title>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chrono-node/1.3.11/chrono.min.js"></script>
-  <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script> <!-- Fixed version of Papa Parse -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/recharts/2.15.0/Recharts.min.js"></script>
+  <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script> <!-- Papa Parse for CSV parsing -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script> <!-- Chart.js for charting -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Note: For production, install Tailwind as a PostCSS plugin or CLI as per https://tailwindcss.com/docs/guides/installation -->
+  <!-- Note: For production, install Tailwind as a PostCSS plugin or CLI: https://tailwindcss.com/docs/guides/installation -->
 </head>
 <body class="bg-gray-100 font-sans">
   <div id="root" class="container mx-auto p-4"></div>
@@ -261,53 +261,58 @@
               <p>趋势强度: <span class="font-semibold">${latestTrend}</span></p>
             </div>
             <div class="mb-8">
-              <div style="width: 100%; height: 400px">
-                <canvas id="chart"></canvas>
-              </div>
+              <canvas id="chart" style="width: 100%; height: 400px;"></canvas>
               <script>
                 const chartData = {
                   labels: filteredData.map(row => row.date.toLocaleDateString()),
                   datasets: [
                     {
                       label: 'BTC价格',
-                      data: filteredData.map(row => row.price),
+                      data: filteredData.map(row => ({ x: row.date.toLocaleDateString(), y: row.price })),
                       fill: false,
                       borderColor: '#3B82F6',
                       borderWidth: 2,
-                      tension: 0.1
+                      tension: 0.1,
+                      pointRadius: 0
                     },
                     {
                       label: '20日均线',
-                      data: filteredData.map(row => row.BTC20MA),
+                      data: filteredData.map(row => ({ x: row.date.toLocaleDateString(), y: row.BTC20MA || null })),
                       fill: false,
                       borderColor: '#F59E0B',
                       borderWidth: 2,
-                      tension: 0.1
+                      tension: 0.1,
+                      pointRadius: 0
                     },
                     {
                       label: '买入信号',
                       data: filteredData.filter(row => row.Signal === '买入').map(row => ({ x: row.date.toLocaleDateString(), y: row.price })),
                       backgroundColor: '#10B981',
-                      pointStyle: 'triangle'
+                      pointStyle: 'triangle',
+                      pointRadius: 6
                     },
                     {
                       label: '卖出信号',
                       data: filteredData.filter(row => row.Signal === '卖出').map(row => ({ x: row.date.toLocaleDateString(), y: row.price })),
                       backgroundColor: '#EF4444',
-                      pointStyle: 'cross'
+                      pointStyle: 'cross',
+                      pointRadius: 6
                     }
                   ]
                 };
                 new Chart(document.getElementById('chart'), {
-                  type: 'line',
+                  type: 'scatter', // Use scatter for mixed line and point data
                   data: chartData,
                   options: {
                     responsive: true,
                     scales: {
-                      x: { title: { display: true, text: '日期' } },
+                      x: { type: 'category', title: { display: true, text: '日期' } },
                       y: { title: { display: true, text: 'BTC价格 (USD)' }, ticks: { callback: value => `$${formatNumber(value)}` } }
                     },
-                    plugins: { legend: { position: 'top' }, tooltip: { callbacks: { label: context => `$${formatNumber(context.raw)}` } } }
+                    plugins: {
+                      legend: { position: 'top' },
+                      tooltip: { callbacks: { label: context => `$${formatNumber(context.raw.y)}` } }
+                    }
                   }
                 });
               </script>
@@ -325,7 +330,7 @@
                   </thead>
                   <tbody>
                     ${signals.map((signal, index) => `
-                      <tr key="${index}" class="border-b">
+                      <tr class="border-b">
                         <td class="p-2">${signal.date.toLocaleDateString()}</td>
                         <td class="p-2 ${signal.Signal === '买入' ? 'text-green-600' : 'text-red-600'}">${signal.Signal}</td>
                         <td class="p-2">${formatNumber(signal.price)}</td>
@@ -349,6 +354,5 @@
     // Initialize the dashboard
     BitcoinTradingDashboard();
   </script>
-  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </body>
 </html>
