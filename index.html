@@ -29,19 +29,22 @@
     }
 
     function calculateIndicators(data) {
-      return data.map((row, index, arr) => {
-        let BTC20MA = null;
-        if (index >= 19) {
-          const prices = arr.slice(index - 19, index + 1).map(r => r.price);
-          BTC20MA = prices.reduce((sum, p) => sum + p, 0) / 20;
-        }
-        const prevBTC20MA = index > 19 ? arr[index - 1].BTC20MA : null;
-        const BTC20MAtrend = (BTC20MA != null && prevBTC20MA != null)
-          ? (BTC20MA > prevBTC20MA ? '上升' : '下降')
-          : '无前值';
-        return { ...row, BTC20MA, BTC20MAtrend };
-      });
+  return data.map((row, index, arr) => {
+    let BTC20MA = null;
+    if (index >= 19) {
+      const prices = arr.slice(index - 19, index + 1).map(r => r.price);
+      BTC20MA = prices.reduce((sum, p) => sum + p, 0) / 20;
     }
+    const prevBTC20MA = index > 19 ? arr[index - 1].BTC20MA : null;
+    let BTC20MAtrend = '未知';
+    if (BTC20MA != null && prevBTC20MA != null) {
+      BTC20MAtrend = BTC20MA > prevBTC20MA ? '上升' : '下降';
+    } else if (BTC20MA != null) {
+      BTC20MAtrend = '上升'; // 如果只有当前MA没有前MA，默认'上升'，可根据策略调整
+    }
+    return { ...row, BTC20MA, BTC20MAtrend };
+  });
+}
 
     function generateSignals(data) {
       return data.map((row, index, arr) => {
