@@ -17,16 +17,30 @@
   <div id="root" class="container mx-auto p-4"></div>
 
   <script type="text/babel">
+    // Fallback sample data
+    function getFallbackData() {
+      return `Column1.date,Column1.close
+2025-07-24,118226.87
+2025-07-23,118810.44
+2025-07-22,120030.12
+2025-06-24,106141
+2025-05-07,103456
+2025-04-22,108765
+2025-04-21,101876
+2025-04-20,102432`;
+    }
+
     // Fetch data from Financial Modeling Prep API
     function loadFileData() {
       const apiUrl = 'https://financialmodelingprep.com/api/v3/historical-price-full/BTCUSD?timeseries=900&apikey=cKlA3lVOMxMjg4hJsC0cn1YAIUu1Hk8P';
       return fetch(apiUrl)
         .then(response => {
-          if (!response.ok) throw new Error('Failed to fetch API data');
+          if (!response.ok) throw new Error(`API request failed: ${response.status} ${response.statusText}`);
           return response.json();
         })
         .then(data => {
           const historical = data.historical || [];
+          if (!historical.length) throw new Error('No historical data returned from API');
           const csvRows = ['Column1.date,Column1.close'];
           historical.forEach(row => {
             csvRows.push(`${row.date},${row.close}`);
@@ -35,7 +49,7 @@
         })
         .catch(err => {
           console.error('Error fetching API:', err);
-          return '';
+          return getFallbackData(); // Use fallback data on error
         });
     }
 
@@ -101,13 +115,16 @@
       const [data, setData] = React.useState([]);
       const [loading, setLoading] = React.useState(true);
       const [lastUpdate, setLastUpdate] = React.useState('-');
+      const [error, setError] = React.useState(null);
       const [showAllData, setShowAllData] = React.useState(false);
 
       // Fetch and process data
       const fetchData = () => {
         setLoading(true);
+        setError(null);
         loadFileData().then(csv => {
           if (!csv) {
+            setError('无法加载数据：数据源返回空');
             setLoading(false);
             return;
           }
@@ -142,6 +159,7 @@
             },
             error: err => {
               console.error('Error parsing data:', err);
+              setError(`数据解析失败：${err.message}`);
               setLoading(false);
             },
           });
@@ -199,10 +217,16 @@
       }
 
       // Error state
-      if (!data.length) {
+      if (error || !data.length) {
         return (
           <div className="text-center text-xl text-red-600 mt-10">
-            ⚠️ 无法加载数据，请检查数据源。
+            ⚠️ 无法加载数据：{error || '数据源返回空，请检查API密钥或网络连接'}
+            <button
+              onClick={fetchData}
+              className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
+            >
+              🔄 重试
+            </button>
           </div>
         );
       }
