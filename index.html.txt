@@ -26,7 +26,6 @@
           return response.json();
         })
         .then(data => {
-          // Convert API data to CSV-like structure
           const historical = data.historical || [];
           const csvRows = ['Column1.date,Column1.close'];
           historical.forEach(row => {
@@ -43,13 +42,11 @@
     // Calculate 20-day MA and trend
     function calculateIndicators(data) {
       return data.map((row, index, arr) => {
-        // Calculate BTC20MA (20-day moving average)
         let BTC20MA = null;
         if (index >= 19) {
           const prices = arr.slice(index - 19, index + 1).map(r => r.price);
           BTC20MA = prices.reduce((sum, price) => sum + price, 0) / 20;
         }
-        // Calculate BTC20MAtrend
         const prevBTC20MA = index > 19 ? arr[index - 1].BTC20MA : null;
         const BTC20MAtrend = BTC20MA && prevBTC20MA
           ? BTC20MA > prevBTC20MA ? '上升' : '下降'
@@ -74,7 +71,6 @@
         const I3 = prevRow.POSITION;
 
         let signal = '';
-        // Sell signal
         if (
           D2 > B2 &&
           F2 === '下降' &&
@@ -85,7 +81,6 @@
         ) {
           signal = '卖出';
         }
-        // Buy signal
         else if (
           D2 < B2 &&
           F2 === '上升' &&
