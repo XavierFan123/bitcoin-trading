@@ -5,18 +5,16 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>BTC交易信号分析</title>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/prop-types/15.8.1/prop-types.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/chrono-node/1.3.11/chrono.min.js"></script>
+  <script src="https://unpkg.com/papaparse@5.4.1/papaparse.min.js"></script> <!-- Fixed version of Papa Parse -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/recharts/2.15.0/Recharts.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Note: For production, install Tailwind as a PostCSS plugin or CLI as per https://tailwindcss.com/docs/guides/installation -->
 </head>
 <body class="bg-gray-100 font-sans">
   <div id="root" class="container mx-auto p-4"></div>
 
-  <script type="text/babel">
+  <script>
     // Fallback sample data
     function getFallbackData() {
       return `Column1.date,Column1.close
@@ -110,16 +108,21 @@
       });
     }
 
-    // Main React component
+    // Main component logic
     function BitcoinTradingDashboard() {
-      const [data, setData] = React.useState([]);
-      const [loading, setLoading] = React.useState(true);
-      const [lastUpdate, setLastUpdate] = React.useState('-');
-      const [error, setError] = React.useState(null);
-      const [showAllData, setShowAllData] = React.useState(false);
+      let data = [];
+      let loading = true;
+      let lastUpdate = '-';
+      let error = null;
+      let showAllData = false;
 
-      // Fetch and process data
-      const fetchData = () => {
+      function setData(newData) { data = newData; render(); }
+      function setLoading(newLoading) { loading = newLoading; render(); }
+      function setLastUpdate(newUpdate) { lastUpdate = newUpdate; render(); }
+      function setError(newError) { error = newError; render(); }
+      function setShowAllData(newValue) { showAllData = newValue; render(); }
+
+      function fetchData() {
         setLoading(true);
         setError(null);
         loadFileData().then(csv => {
@@ -164,14 +167,11 @@
             },
           });
         });
-      };
+      }
 
       // Initial fetch and auto-refresh every 5 minutes
-      React.useEffect(() => {
-        fetchData();
-        const interval = setInterval(fetchData, 5 * 60 * 1000);
-        return () => clearInterval(interval);
-      }, []);
+      fetchData();
+      setInterval(fetchData, 5 * 60 * 1000);
 
       // Filter data for display
       const filteredData = showAllData
@@ -207,180 +207,148 @@
         return num.toFixed(2);
       };
 
-      // Loading state
-      if (loading) {
-        return (
-          <div className="text-center text-xl text-gray-600 mt-10">
-            📊 正在获取最新BTC价格数据...
-          </div>
-        );
-      }
-
-      // Error state
-      if (error || !data.length) {
-        return (
-          <div className="text-center text-xl text-red-600 mt-10">
-            ⚠️ 无法加载数据：{error || '数据源返回空，请检查API密钥或网络连接'}
-            <button
-              onClick={fetchData}
-              className="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-            >
-              🔄 重试
-            </button>
-          </div>
-        );
-      }
-
-      // Main dashboard
-      return (
-        <div className="bg-white shadow-lg rounded-lg p-6">
-          <h1 className="text-3xl font-bold text-blue-600 mb-4 flex items-center">
-            📊 BTC交易信号分析
-          </h1>
-          <p className="text-gray-600 mb-4">
-            基于实时价格数据和技术指标的智能交易建议
-          </p>
-          <p className="text-gray-600 mb-4 italic">
-            策略特点：捕捉高波动性机会，但信号较为稀疏，可能错过小幅波动。
-          </p>
-
-          {/* Last update and refresh */}
-          <div className="mb-4">
-            <p className="text-gray-600">📅 最后更新: {lastUpdate}</p>
-            <div className="flex space-x-2 mt-2">
-              <button
-                onClick={fetchData}
-                className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600"
-              >
-                🔄 立即刷新
-              </button>
-              <span className="text-gray-600 self-center">📡 数据更新频率: 每5分钟</span>
+      // Render function
+      function render() {
+        const root = document.getElementById('root');
+        if (loading) {
+          root.innerHTML = '<div class="text-center text-xl text-gray-600 mt-10">📊 正在获取最新BTC价格数据...</div>';
+          return;
+        }
+        if (error || !data.length) {
+          root.innerHTML = `
+            <div class="text-center text-xl text-red-600 mt-10">
+              ⚠️ 无法加载数据：${error || '数据源返回空，请检查API密钥或网络连接'}
+              <button onclick="fetchData()" class="mt-4 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">🔄 重试</button>
             </div>
-          </div>
-
-          {/* Current trading suggestion */}
-          <div className="mb-6">
-            <h2 className="text-xl font-semibold text-gray-800 mb-2">🎯 当前交易建议</h2>
-            <p className="text-lg font-bold text-blue-800">{currentPosition}</p>
-            <p className="text-gray-600">基于最新市场数据分析</p>
-          </div>
-
-          {/* Price information */}
-          <div className="mb-6">
-            <h2 className="text-xl font-semibold text-gray-800 mb-2">💰 价格信息</h2>
-            <p className="text-2xl font-bold text-green-600">${formatNumber(latestPrice)}</p>
-            <p className="text-gray-600">变化: {latestChange}%</p>
-            <p className="text-gray-500 text-sm">数据来源: Financial Modeling Prep</p>
-          </div>
-
-          {/* Moving averages */}
-          <div className="mb-6">
-            <h2 className="text-xl font-semibold text-gray-800 mb-2">📈 移动平均线对比</h2>
-            <div className="flex space-x-4">
-              <div>
-                <p className="text-lg font-bold text-blue-600">${formatNumber(latest20MA)}</p>
-                <p className="text-gray-600">20日均线</p>
+          `;
+          return;
+        }
+        root.innerHTML = `
+          <div class="bg-white shadow-lg rounded-lg p-6">
+            <h1 class="text-3xl font-bold text-blue-600 mb-4 flex items-center">📊 BTC交易信号分析</h1>
+            <p class="text-gray-600 mb-4">基于实时价格数据和技术指标的智能交易建议</p>
+            <p class="text-gray-600 mb-4 italic">策略特点：捕捉高波动性机会，但信号较为稀疏，可能错过小幅波动。</p>
+            <div class="mb-4">
+              <p class="text-gray-600">📅 最后更新: ${lastUpdate}</p>
+              <div class="flex space-x-2 mt-2">
+                <button onclick="fetchData()" class="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600">🔄 立即刷新</button>
+                <span class="text-gray-600 self-center">📡 数据更新频率: 每5分钟</span>
               </div>
             </div>
-          </div>
-
-          {/* Technical indicators */}
-          <div className="mb-6">
-            <h2 className="text-xl font-semibold text-gray-800 mb-2">🔍 技术指标</h2>
-            <p>价格位置: <span className="font-semibold">{pricePosition}</span></p>
-            <p>趋势强度: <span className="font-semibold">{latestTrend}</span></p>
-          </div>
-
-          {/* Line chart */}
-          <div className="mb-8">
-            <Recharts.ResponsiveContainer width="100%" height={400}>
-              <Recharts.LineChart data={filteredData} margin={{ top: 20, right: 30, left: 20, bottom: 20 }}>
-                <Recharts.CartesianGrid strokeDasharray="3 3" />
-                <Recharts.XAxis
-                  dataKey="date"
-                  tickFormatter={date => date.toLocaleDateString()}
-                  style={{ fontSize: 12 }}
-                />
-                <Recharts.YAxis
-                  dataKey="price"
-                  tickFormatter={formatNumber}
-                  style={{ fontSize: 12 }}
-                  label={{ value: 'BTC价格 (USD)', angle: -90, position: 'insideLeft', offset: -10 }}
-                />
-                <Recharts.Tooltip
-                  formatter={value => formatNumber(value)}
-                  labelFormatter={label => new Date(label).toLocaleDateString()}
-                />
-                <Recharts.Legend />
-                <Recharts.Line
-                  type="monotone"
-                  dataKey="price"
-                  stroke="#3B82F6"
-                  strokeWidth={2}
-                  name="BTC价格"
-                />
-                <Recharts.Line
-                  type="monotone"
-                  dataKey="BTC20MA"
-                  stroke="#F59E0B"
-                  strokeWidth={2}
-                  name="20日均线"
-                />
-                <Recharts.Scatter
-                  data={filteredData.filter(row => row.Signal === '买入')}
-                  name="买入信号"
-                  fill="#10B981"
-                  shape="triangle"
-                />
-                <Recharts.Scatter
-                  data={filteredData.filter(row => row.Signal === '卖出')}
-                  name="卖出信号"
-                  fill="#EF4444"
-                  shape="cross"
-                />
-              </Recharts.LineChart>
-            </Recharts.ResponsiveContainer>
-          </div>
-
-          {/* Signals table */}
-          <div className="mb-6">
-            <h2 className="text-xl font-semibold text-gray-800 mb-2">📋 近期交易信号</h2>
-            <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse">
-                <thead>
-                  <tr className="bg-blue-100">
-                    <th className="p-2">日期</th>
-                    <th className="p-2">信号</th>
-                    <th className="p-2">价格 (USD)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {signals.map((signal, index) => (
-                    <tr key={index} className="border-b">
-                      <td className="p-2">{signal.date.toLocaleDateString()}</td>
-                      <td className={`p-2 ${signal.Signal === '买入' ? 'text-green-600' : 'text-red-600'}`}>
-                        {signal.Signal}
-                      </td>
-                      <td className="p-2">{formatNumber(signal.price)}</td>
+            <div class="mb-6">
+              <h2 class="text-xl font-semibold text-gray-800 mb-2">🎯 当前交易建议</h2>
+              <p class="text-lg font-bold text-blue-800">${currentPosition}</p>
+              <p class="text-gray-600">基于最新市场数据分析</p>
+            </div>
+            <div class="mb-6">
+              <h2 class="text-xl font-semibold text-gray-800 mb-2">💰 价格信息</h2>
+              <p class="text-2xl font-bold text-green-600">$$  {formatNumber(latestPrice)}</p>
+              <p class="text-gray-600">变化: ${latestChange}%</p>
+              <p class="text-gray-500 text-sm">数据来源: Financial Modeling Prep</p>
+            </div>
+            <div class="mb-6">
+              <h2 class="text-xl font-semibold text-gray-800 mb-2">📈 移动平均线对比</h2>
+              <div class="flex space-x-4">
+                <div>
+                  <p class="text-lg font-bold text-blue-600">  $${formatNumber(latest20MA)}</p>
+                  <p class="text-gray-600">20日均线</p>
+                </div>
+              </div>
+            </div>
+            <div class="mb-6">
+              <h2 class="text-xl font-semibold text-gray-800 mb-2">🔍 技术指标</h2>
+              <p>价格位置: <span class="font-semibold">${pricePosition}</span></p>
+              <p>趋势强度: <span class="font-semibold">${latestTrend}</span></p>
+            </div>
+            <div class="mb-8">
+              <div style="width: 100%; height: 400px">
+                <canvas id="chart"></canvas>
+              </div>
+              <script>
+                const chartData = {
+                  labels: filteredData.map(row => row.date.toLocaleDateString()),
+                  datasets: [
+                    {
+                      label: 'BTC价格',
+                      data: filteredData.map(row => row.price),
+                      fill: false,
+                      borderColor: '#3B82F6',
+                      borderWidth: 2,
+                      tension: 0.1
+                    },
+                    {
+                      label: '20日均线',
+                      data: filteredData.map(row => row.BTC20MA),
+                      fill: false,
+                      borderColor: '#F59E0B',
+                      borderWidth: 2,
+                      tension: 0.1
+                    },
+                    {
+                      label: '买入信号',
+                      data: filteredData.filter(row => row.Signal === '买入').map(row => ({ x: row.date.toLocaleDateString(), y: row.price })),
+                      backgroundColor: '#10B981',
+                      pointStyle: 'triangle'
+                    },
+                    {
+                      label: '卖出信号',
+                      data: filteredData.filter(row => row.Signal === '卖出').map(row => ({ x: row.date.toLocaleDateString(), y: row.price })),
+                      backgroundColor: '#EF4444',
+                      pointStyle: 'cross'
+                    }
+                  ]
+                };
+                new Chart(document.getElementById('chart'), {
+                  type: 'line',
+                  data: chartData,
+                  options: {
+                    responsive: true,
+                    scales: {
+                      x: { title: { display: true, text: '日期' } },
+                      y: { title: { display: true, text: 'BTC价格 (USD)' }, ticks: { callback: value => `$${formatNumber(value)}` } }
+                    },
+                    plugins: { legend: { position: 'top' }, tooltip: { callbacks: { label: context => `$${formatNumber(context.raw)}` } } }
+                  }
+                });
+              </script>
+            </div>
+            <div class="mb-6">
+              <h2 class="text-xl font-semibold text-gray-800 mb-2">📋 近期交易信号</h2>
+              <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                  <thead>
+                    <tr class="bg-blue-100">
+                      <th class="p-2">日期</th>
+                      <th class="p-2">信号</th>
+                      <th class="p-2">价格 (USD)</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    ${signals.map((signal, index) => `
+                      <tr key="${index}" class="border-b">
+                        <td class="p-2">${signal.date.toLocaleDateString()}</td>
+                        <td class="p-2 ${signal.Signal === '买入' ? 'text-green-600' : 'text-red-600'}">${signal.Signal}</td>
+                        <td class="p-2">${formatNumber(signal.price)}</td>
+                      </tr>
+                    `).join('')}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <div class="text-gray-500 text-sm">
+              <p>⚠️ 本分析仅供参考，投资有风险，决策需谨慎</p>
+              <p>🤖 基于实时数据的量化分析系统</p>
             </div>
           </div>
+        `;
+      }
 
-          {/* Disclaimer */}
-          <div className="text-gray-500 text-sm">
-            <p>⚠️ 本分析仅供参考，投资有风险，决策需谨慎</p>
-            <p>🤖 基于实时数据的量化分析系统</p>
-          </div>
-        </div>
-      );
+      render();
     }
 
-    // Render component
-    const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(<BitcoinTradingDashboard />);
+    // Initialize the dashboard
+    BitcoinTradingDashboard();
   </script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </body>
 </html>
