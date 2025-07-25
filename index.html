@@ -107,29 +107,45 @@
     function calculateIndicators(data) {
       console.log("开始计算指标，数据长度:", data.length);
       
-      const dataWithIndicators = data.map((row, index, arr) => {
-        // 计算20日均线
+      // 首先计算所有的20日均线
+      const dataWithMA = data.map((row, index, arr) => {
         let BTC20MA = null;
-        if (index >= 19) {
+        if (index >= 19) { // 第20个数据点开始计算（索引19）
           const prices = arr.slice(index - 19, index + 1).map(r => r.price);
           if (prices.length === 20 && prices.every(p => typeof p === 'number' && !isNaN(p))) {
             BTC20MA = prices.reduce((sum, p) => sum + p, 0) / 20;
           }
         }
+        return { ...row, BTC20MA };
+      });
 
-        // 计算20日均线趋势
+      // 然后计算趋势（需要在所有MA计算完成后）
+      const dataWithIndicators = dataWithMA.map((row, index, arr) => {
         let BTC20MAtrend = '未知';
-        if (BTC20MA != null && index > 0) {
+        
+        if (row.BTC20MA != null && index > 0) {
           const prevBTC20MA = arr[index - 1].BTC20MA;
           if (prevBTC20MA != null) {
-            BTC20MAtrend = BTC20MA > prevBTC20MA ? '上升' : '下降';
+            // 根据Excel公式：IF(D2>D3,"上升","下降")
+            BTC20MAtrend = row.BTC20MA > prevBTC20MA ? '上升' : '下降';
           }
         }
 
-        return { ...row, BTC20MA, BTC20MAtrend };
+        return { ...row, BTC20MAtrend };
       });
       
-      console.log("前25个数据点（含MA和趋势）:", dataWithIndicators.slice(0, 25));
+      // 详细日志
+      const validMACount = dataWithIndicators.filter(r => r.BTC20MA != null).length;
+      const validTrendCount = dataWithIndicators.filter(r => r.BTC20MAtrend !== '未知').length;
+      
+      console.log(`MA计算结果: ${validMACount}个有效MA值, ${validTrendCount}个有效趋势值`);
+      console.log("最后5个数据点:", dataWithIndicators.slice(-5).map(r => ({
+        date: r.date.toLocaleDateString(),
+        price: r.price,
+        ma: r.BTC20MA ? r.BTC20MA.toFixed(2) : null,
+        trend: r.BTC20MAtrend
+      })));
+      
       return dataWithIndicators;
     }
 
@@ -146,8 +162,8 @@
           currentPosition = arr[index - 1].POSITION || '空仓';
         }
 
-        // 只有从第二行开始才能生成信号（需要前一行的数据）
-        if (index > 0) {
+        // 从第20个数据点开始生成信号（索引19，因为需要当前和前一天都有MA和趋势）
+        if (index >= 20) {
           const currentRow = row;
           const prevRow = arr[index - 1];
 
@@ -162,26 +178,40 @@
           const F_prev = prevRow.BTC20MAtrend;      // 前一日趋势
           const I_prev = prevRow.POSITION;          // 前一日仓位
 
-          // 确保所有必要的数据都存在
+          // 确保所有必要的数据都存在且有效
           if (D_current != null && B_current != null && 
               D_prev != null && B_prev != null && 
               F_current !== '未知' && F_prev !== '未知') {
 
             // 卖出信号逻辑
-            // IF(AND(D2>B2, F2="下降", OR(AND(B2<D2*(1-0.01), B3>=D3), AND(I3="持有", B2<D2, F3="上升"))), "卖出", ...)
-            if (D_current > B_current && 
-                F_current === '下降' && 
-                ((B_current < D_current * (1 - 0.01) && B_prev >= D_prev) ||
-                 (I_prev === '持有' && B_current < D_current && F_prev === '上升'))) {
+            // Excel: IF(AND(D2>B2, F2="下降", OR(AND(B2<D2*(1-0.01), B3>=D3), AND(I3="持有", B2<D2, F3="上升"))), "卖出", ...)
+            const sellCondition1 = B_current < D_current * (1 - 0.01) && B_prev >= D_prev;
+            const sellCondition2 = I_prev === '持有' && B_current < D_current && F_prev === '上升';
+            
+            if (D_current > B_current && F_current === '下降' && (sellCondition1 || sellCondition2)) {
               signal = '卖出';
             }
+            
             // 买入信号逻辑  
-            // IF(AND(D2<B2, F2="上升", OR(AND(B2>D2*(1+0.01), B3<=D3), AND(I3="空仓", B2>D2, F3="下降"))), "买入", "")
-            else if (D_current < B_current && 
-                     F_current === '上升' && 
-                     ((B_current > D_current * (1 + 0.01) && B_prev <= D_prev) ||
-                      (I_prev === '空仓' && B_current > D_current && F_prev === '下降'))) {
+            // Excel: IF(AND(D2<B2, F2="上升", OR(AND(B2>D2*(1+0.01), B3<=D3), AND(I3="空仓", B2>D2, F3="下降"))), "买入", "")
+            const buyCondition1 = B_current > D_current * (1 + 0.01) && B_prev <= D_prev;
+            const buyCondition2 = I_prev === '空仓' && B_current > D_current && F_prev === '下降';
+            
+            if (D_current < B_current && F_current === '上升' && (buyCondition1 || buyCondition2)) {
               signal = '买入';
+            }
+
+            // 调试输出（仅对最后几个数据点）
+            if (index >= data.length - 5) {
+              console.log(`第${index + 1}天信号分析:`, {
+                date: formatDate(currentRow.date),
+                价格: B_current.toFixed(2),
+                均线: D_current.toFixed(2),
+                当前趋势: F_current,
+                前日趋势: F_prev,
+                前日仓位: I_prev,
+                信号: signal || '无'
+              });
             }
           }
         }
@@ -196,7 +226,9 @@
         return { ...row, Signal: signal, POSITION: currentPosition };
       });
       
-      console.log("最后10个数据点（含信号）:", dataWithSignals.slice(-10));
+      const totalSignals = dataWithSignals.filter(r => r.Signal && r.Signal !== '').length;
+      console.log(`信号生成完成，总共生成了 ${totalSignals} 个交易信号`);
+      
       return dataWithSignals;
     }
 
@@ -335,6 +367,13 @@
             <p class="text-gray-500 text-xs">
               ⚠️ 本分析仅供参考，投资有风险，决策需谨慎。最后更新时间: ${new Date().toLocaleString('zh-CN')}
             </p>
+            <button onclick="window.showDebugInfo()" class="mt-2 px-4 py-2 bg-blue-500 text-white rounded text-xs hover:bg-blue-600">
+              显示调试信息
+            </button>
+            <div id="debugInfo" class="hidden mt-4 p-4 bg-gray-100 rounded text-left text-xs">
+              <h3 class="font-bold mb-2">调试信息：</h3>
+              <div id="debugContent"></div>
+            </div>
           </div>
         </div>
       `;
@@ -446,6 +485,52 @@
       });
       
       console.log("仪表板渲染完成。");
+      
+      // 添加调试功能
+      window.showDebugInfo = function() {
+        const debugDiv = document.getElementById('debugInfo');
+        const debugContent = document.getElementById('debugContent');
+        
+        if (debugDiv.classList.contains('hidden')) {
+          debugDiv.classList.remove('hidden');
+          
+          const lastData = dataWithSignals.slice(-10);
+          let debugHTML = '<p><strong>最后10天数据分析：</strong></p>';
+          
+          lastData.forEach((item, idx) => {
+            const actualIndex = dataWithSignals.length - 10 + idx;
+            debugHTML += `
+              <div class="mb-2 p-2 border rounded">
+                <strong>第${actualIndex + 1}天 (${formatDate(item.date)}):</strong><br>
+                价格: ${formatNumber(item.price)}<br>
+                20日均线: ${item.BTC20MA ? '
+
+    // 初始化渲染
+    renderDashboard();
+    
+    // 设置自动刷新 - 每5分钟更新一次
+    setInterval(renderDashboard, 5 * 60 * 1000);
+  </script>
+
+</body>
+</html> + formatNumber(item.BTC20MA) : 'N/A'}<br>
+                趋势: ${item.BTC20MAtrend}<br>
+                信号: ${item.Signal || '无'}<br>
+                仓位: ${item.POSITION}
+              </div>
+            `;
+          });
+          
+          debugHTML += `<p class="mt-4"><strong>总数据量:</strong> ${dataWithSignals.length} 天</p>`;
+          debugHTML += `<p><strong>有效均线数据:</strong> ${dataWithSignals.filter(r => r.BTC20MA != null).length} 天</p>`;
+          debugHTML += `<p><strong>有趋势数据:</strong> ${dataWithSignals.filter(r => r.BTC20MAtrend !== '未知').length} 天</p>`;
+          debugHTML += `<p><strong>总交易信号:</strong> ${dataWithSignals.filter(r => r.Signal && r.Signal !== '').length} 个</p>`;
+          
+          debugContent.innerHTML = debugHTML;
+        } else {
+          debugDiv.classList.add('hidden');
+        }
+      };
     }
 
     // 初始化渲染
