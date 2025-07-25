@@ -503,17 +503,7 @@
               <div class="mb-2 p-2 border rounded">
                 <strong>第${actualIndex + 1}天 (${formatDate(item.date)}):</strong><br>
                 价格: ${formatNumber(item.price)}<br>
-                20日均线: ${item.BTC20MA ? '
-
-    // 初始化渲染
-    renderDashboard();
-    
-    // 设置自动刷新 - 每5分钟更新一次
-    setInterval(renderDashboard, 5 * 60 * 1000);
-  </script>
-
-</body>
-</html> + formatNumber(item.BTC20MA) : 'N/A'}<br>
+                20日均线: ${item.BTC20MA ? formatNumber(item.BTC20MA) : 'N/A'}<br>
                 趋势: ${item.BTC20MAtrend}<br>
                 信号: ${item.Signal || '无'}<br>
                 仓位: ${item.POSITION}
