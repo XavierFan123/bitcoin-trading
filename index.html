@@ -282,9 +282,11 @@
       const dataWithMA = calculateIndicators(rawData);
       const dataWithSignals = generateSignals(dataWithMA);
 
-      // 获取最新数据
+      // 获取最新数据 - 修复当前交易建议显示
       const latest = dataWithSignals[dataWithSignals.length - 1] || {};
       const currentPosition = latest.POSITION || '未知';
+      console.log(`获取最新数据: 最后一天是 ${formatDate(latest.date)}, 仓位: ${currentPosition}, 信号: ${latest.Signal || '无'}`);
+      
       const latestPrice = latest.price || 0;
       const latestChange = dataWithSignals.length > 1 && dataWithSignals[dataWithSignals.length - 2].price !== 0
         ? ((latestPrice - dataWithSignals[dataWithSignals.length - 2].price) / dataWithSignals[dataWithSignals.length - 2].price * 100).toFixed(2)
