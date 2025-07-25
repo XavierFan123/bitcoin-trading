@@ -162,8 +162,8 @@
           currentPosition = arr[index - 1].POSITION || '空仓';
         }
 
-        // 从第20个数据点开始生成信号（索引19，因为需要当前和前一天都有MA和趋势）
-        if (index >= 20) {
+        // 从第21个数据点开始生成信号（索引20，因为需要当前和前一天都有MA和趋势）
+        if (index >= 21) {
           const currentRow = row;
           const prevRow = arr[index - 1];
 
@@ -183,22 +183,32 @@
               D_prev != null && B_prev != null && 
               F_current !== '未知' && F_prev !== '未知') {
 
-            // 卖出信号逻辑
-            // Excel: IF(AND(D2>B2, F2="下降", OR(AND(B2<D2*(1-0.01), B3>=D3), AND(I3="持有", B2<D2, F3="上升"))), "卖出", ...)
-            const sellCondition1 = B_current < D_current * (1 - 0.01) && B_prev >= D_prev;
-            const sellCondition2 = I_prev === '持有' && B_current < D_current && F_prev === '上升';
-            
-            if (D_current > B_current && F_current === '下降' && (sellCondition1 || sellCondition2)) {
-              signal = '卖出';
+            // 买入信号逻辑
+            // 必要条件：20均线趋势上升
+            if (F_current === '上升') {
+              // 条件1：价格突破均线1%以上，且前日低于均线
+              const buyCondition1 = B_current > D_current * (1 + 0.01) && B_prev <= D_prev;
+              
+              // 条件2：空仓时价格本高于均线，但20均线由下降趋势转为上升
+              const buyCondition2 = I_prev === '空仓' && B_current > D_current && F_prev === '下降';
+              
+              if (buyCondition1 || buyCondition2) {
+                signal = '买入';
+              }
             }
             
-            // 买入信号逻辑  
-            // Excel: IF(AND(D2<B2, F2="上升", OR(AND(B2>D2*(1+0.01), B3<=D3), AND(I3="空仓", B2>D2, F3="下降"))), "买入", "")
-            const buyCondition1 = B_current > D_current * (1 + 0.01) && B_prev <= D_prev;
-            const buyCondition2 = I_prev === '空仓' && B_current > D_current && F_prev === '下降';
-            
-            if (D_current < B_current && F_current === '上升' && (buyCondition1 || buyCondition2)) {
-              signal = '买入';
+            // 卖出信号逻辑
+            // 必要条件：20均线趋势下降
+            if (F_current === '下降') {
+              // 条件1：价格跌破均线1%以上，且前日高于均线
+              const sellCondition1 = B_current < D_current * (1 - 0.01) && B_prev >= D_prev;
+              
+              // 条件2：持仓时价格本低于均线，但20均线由上升趋势转为下降
+              const sellCondition2 = I_prev === '持有' && B_current < D_current && F_prev === '上升';
+              
+              if (sellCondition1 || sellCondition2) {
+                signal = '卖出';
+              }
             }
 
             // 调试输出（仅对最后几个数据点）
@@ -210,6 +220,7 @@
                 当前趋势: F_current,
                 前日趋势: F_prev,
                 前日仓位: I_prev,
+                价格相对均线: B_current > D_current ? '高于' : '低于',
                 信号: signal || '无'
               });
             }
@@ -339,19 +350,25 @@
 
             <div class="bg-gray-50 rounded-lg p-4">
               <h2 class="text-lg font-semibold text-gray-700 mb-4">📋 交易逻辑说明</h2>
-              <div class="text-sm text-gray-600 space-y-2">
-                <p><strong>买入条件:</strong></p>
-                <ul class="list-disc list-inside ml-2 space-y-1">
-                  <li>价格高于20日均线且趋势上升</li>
-                  <li>价格突破均线1%以上，且前日低于均线</li>
-                  <li>或空仓时价格上穿均线且前日趋势下降</li>
-                </ul>
-                <p><strong>卖出条件:</strong></p>
-                <ul class="list-disc list-inside ml-2 space-y-1">
-                  <li>价格低于20日均线且趋势下降</li>
-                  <li>价格跌破均线1%以上，且前日高于均线</li>
-                  <li>或持有时价格下穿均线且前日趋势上升</li>
-                </ul>
+              <div class="text-sm text-gray-600 space-y-3">
+                <div>
+                  <p><strong>买入条件:</strong></p>
+                  <p class="ml-2 mb-1"><strong>必要条件：</strong>20均线趋势上升</p>
+                  <p class="ml-2 mb-1"><strong>并且符合以下任一条件：</strong></p>
+                  <ul class="list-disc list-inside ml-4 space-y-1">
+                    <li>价格突破均线1%以上，且前日低于均线</li>
+                    <li>或空仓时价格本高于均线，但20均线由下降趋势转为上升</li>
+                  </ul>
+                </div>
+                <div>
+                  <p><strong>卖出条件:</strong></p>
+                  <p class="ml-2 mb-1"><strong>必要条件：</strong>20均线趋势下降</p>
+                  <p class="ml-2 mb-1"><strong>并且符合以下任一条件：</strong></p>
+                  <ul class="list-disc list-inside ml-4 space-y-1">
+                    <li>价格跌破均线1%以上，且前日高于均线</li>
+                    <li>或持仓时价格本低于均线，但20均线由上升趋势转为下降</li>
+                  </ul>
+                </div>
               </div>
             </div>
           </div>
