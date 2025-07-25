@@ -158,74 +158,60 @@
         let currentPosition = '空仓'; // 默认初始仓位为空仓
         
         // 如果不是第一行，从前一行继承仓位
-        if (index > 0) {
-          currentPosition = arr[index - 1].POSITION || '空仓';
+        if (index > 0 && arr[index - 1].POSITION) {
+          currentPosition = arr[index - 1].POSITION;
         }
 
-        // 从第21个数据点开始生成信号（索引20，因为需要当前和前一天都有MA和趋势）
+        // 从第20个数据点开始生成信号（索引19，需要有20日均线数据）
         if (index >= 20) {
-          const currentRow = row;
-          const prevRow = arr[index - 1];
-
           // 当前行数据
-          const B_current = currentRow.price;       // 当前价格
-          const D_current = currentRow.BTC20MA;     // 当前20日均线
-          const F_current = currentRow.BTC20MAtrend; // 当前趋势
+          const currentPrice = parseFloat(row.price);
+          const currentMA = parseFloat(row.BTC20MA);
+          const currentTrend = row.BTC20MAtrend;
+          
+          // 前一日的仓位
+          const prevPosition = index > 0 ? (arr[index - 1].POSITION || '空仓') : '空仓';
 
-          // 前一行数据
-          const I_prev = prevRow.POSITION;          // 前一日仓位
-
-          // 确保所有必要的数据都存在且有效
-          if (D_current != null && B_current != null && F_current !== '未知') {
-
-            // 买入信号逻辑：三个条件同时满足
-            // 1. 前一日属于空仓状态
-            // 2. 20均线趋势上升
-            // 3. 价格高于均线1%以上
-            if (I_prev === '空仓' && 
-                F_current === '上升' && 
-                B_current > D_current * (1 + 0.01)) {
+          // 确保数据有效性
+          if (currentPrice && currentMA && currentTrend && currentTrend !== '未知') {
+            
+            // 计算阈值
+            const buyThreshold = currentMA * 1.01;  // 均线上方1%
+            const sellThreshold = currentMA * 0.99; // 均线下方1%
+            
+            // 买入条件检查（三个条件同时满足）
+            const condition1_buy = prevPosition === '空仓';
+            const condition2_buy = currentTrend === '上升';
+            const condition3_buy = currentPrice > buyThreshold;
+            
+            if (condition1_buy && condition2_buy && condition3_buy) {
               signal = '买入';
             }
             
-            // 卖出信号逻辑：三个条件同时满足
-            // 1. 前一日属于持仓状态
-            // 2. 20均线趋势下降
-            // 3. 价格低于均线1%以下
-            if (I_prev === '持有' && 
-                F_current === '下降' && 
-                B_current < D_current * (1 - 0.01)) {
+            // 卖出条件检查（三个条件同时满足）
+            const condition1_sell = prevPosition === '持有';
+            const condition2_sell = currentTrend === '下降';
+            const condition3_sell = currentPrice < sellThreshold;
+            
+            if (condition1_sell && condition2_sell && condition3_sell) {
               signal = '卖出';
             }
 
-            // 详细调试输出
-            if (index >= data.length - 10) {
-              const priceVsMA = ((B_current - D_current) / D_current * 100).toFixed(2);
-              const buyThreshold = D_current * 1.01;
-              const sellThreshold = D_current * 0.99;
-              
-              console.log(`第${index + 1}天 (${formatDate(currentRow.date)}) 信号分析:`, {
-                价格: B_current.toFixed(2),
-                均线: D_current.toFixed(2),
-                价格相对均线: `${priceVsMA}%`,
-                当前趋势: F_current,
-                前日仓位: I_prev,
-                买入阈值: buyThreshold.toFixed(2),
-                卖出阈值: sellThreshold.toFixed(2),
-                买入条件检查: {
-                  空仓: I_prev === '空仓',
-                  上升趋势: F_current === '上升',
-                  价格高于阈值: B_current > buyThreshold,
-                  满足买入: I_prev === '空仓' && F_current === '上升' && B_current > buyThreshold
-                },
-                卖出条件检查: {
-                  持仓: I_prev === '持有',
-                  下降趋势: F_current === '下降',
-                  价格低于阈值: B_current < sellThreshold,
-                  满足卖出: I_prev === '持有' && F_current === '下降' && B_current < sellThreshold
-                },
-                最终信号: signal || '无'
-              });
+            // 调试输出（显示更多天数以便分析）
+            if (index >= data.length - 15 || (signal && signal !== '')) {
+              const priceVsMA = ((currentPrice - currentMA) / currentMA * 100);
+              console.log(`=== 第${index + 1}天 (${formatDate(row.date)}) ===`);
+              console.log(`价格: ${currentPrice.toFixed(2)}`);
+              console.log(`均线: ${currentMA.toFixed(2)}`);
+              console.log(`价格相对均线: ${priceVsMA.toFixed(2)}%`);
+              console.log(`趋势: ${currentTrend}`);
+              console.log(`前日仓位: ${prevPosition}`);
+              console.log(`买入阈值: ${buyThreshold.toFixed(2)}`);
+              console.log(`卖出阈值: ${sellThreshold.toFixed(2)}`);
+              console.log(`买入条件: 空仓(${condition1_buy}) + 上升(${condition2_buy}) + 价格>${buyThreshold.toFixed(2)}(${condition3_buy}) = ${condition1_buy && condition2_buy && condition3_buy}`);
+              console.log(`卖出条件: 持有(${condition1_sell}) + 下降(${condition2_sell}) + 价格<${sellThreshold.toFixed(2)}(${condition3_sell}) = ${condition1_sell && condition2_sell && condition3_sell}`);
+              console.log(`信号: ${signal || '无'}`);
+              console.log('---');
             }
           }
         }
@@ -237,11 +223,29 @@
           currentPosition = '空仓';
         }
 
-        return { ...row, Signal: signal, POSITION: currentPosition };
+        return { 
+          ...row, 
+          Signal: signal, 
+          POSITION: currentPosition 
+        };
       });
       
-      const totalSignals = dataWithSignals.filter(r => r.Signal && r.Signal !== '').length;
-      console.log(`信号生成完成，总共生成了 ${totalSignals} 个交易信号`);
+      // 统计信号
+      const allSignals = dataWithSignals.filter(r => r.Signal && r.Signal !== '');
+      const buySignals = dataWithSignals.filter(r => r.Signal === '买入');
+      const sellSignals = dataWithSignals.filter(r => r.Signal === '卖出');
+      
+      console.log(`信号生成完成：`);
+      console.log(`- 总交易信号: ${allSignals.length} 个`);
+      console.log(`- 买入信号: ${buySignals.length} 个`);
+      console.log(`- 卖出信号: ${sellSignals.length} 个`);
+      
+      if (buySignals.length > 0) {
+        console.log('买入信号日期:', buySignals.map(s => formatDate(s.date)));
+      }
+      if (sellSignals.length > 0) {
+        console.log('卖出信号日期:', sellSignals.map(s => formatDate(s.date)));
+      }
       
       return dataWithSignals;
     }
