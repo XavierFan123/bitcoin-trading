@@ -271,24 +271,6 @@
               signal = '卖出';
               currentPosition = '空仓'; // 卖出后立即转为空仓
             }
-
-            // 调试输出（显示更多天数以便分析）
-            if (index >= data.length - 15 || (signal && signal !== '')) {
-              const priceVsMA = ((currentPrice - currentMA) / currentMA * 100);
-              console.log(`=== 第${index + 1}天 (${formatDate(row.date)}) ===`);
-              console.log(`价格: ${currentPrice.toFixed(2)}`);
-              console.log(`均线: ${currentMA.toFixed(2)}`);
-              console.log(`价格相对均线: ${priceVsMA.toFixed(2)}%`);
-              console.log(`趋势: ${currentTrend}`);
-              console.log(`前一天仓位: ${prevPosition}`);
-              console.log(`买入阈值: ${buyThreshold.toFixed(2)}`);
-              console.log(`卖出阈值: ${sellThreshold.toFixed(2)}`);
-              console.log(`买入条件: 空仓(${condition1_buy}) + 上升(${condition2_buy}) + 价格>${buyThreshold.toFixed(2)}(${condition3_buy}) = ${condition1_buy && condition2_buy && condition3_buy}`);
-              console.log(`卖出条件: 持有(${condition1_sell}) + 下降(${condition2_sell}) + 价格<${sellThreshold.toFixed(2)}(${condition3_sell}) = ${condition1_sell && condition2_sell && condition3_sell}`);
-              console.log(`信号: ${signal || '无'}`);
-              console.log(`当天仓位: ${currentPosition}`);
-              console.log('---');
-            }
           }
         }
 
@@ -312,13 +294,6 @@
       // 获取最终仓位状态
       const finalPosition = dataWithSignals.length > 0 ? dataWithSignals[dataWithSignals.length - 1].POSITION : '未知';
       console.log(`- 最终仓位状态: ${finalPosition}`);
-      
-      if (buySignals.length > 0) {
-        console.log('买入信号日期:', buySignals.map(s => formatDate(s.date)));
-      }
-      if (sellSignals.length > 0) {
-        console.log('卖出信号日期:', sellSignals.map(s => formatDate(s.date)));
-      }
       
       return dataWithSignals;
     }
@@ -612,10 +587,12 @@
               cornerRadius: 12,
               callbacks: {
                 label: function(context) {
-                  if (context.dataset.label.includes('信号')) {
-                    return context.dataset.label + ':  + formatNumber(context.parsed.y);
+                  const label = context.dataset.label || '';
+                  const value = context.parsed.y;
+                  if (label.includes('信号')) {
+                    return label + ': ' + formatNumber(value);
                   }
-                  return context.dataset.label + ':  + formatNumber(context.parsed.y);
+                  return label + ': ' + formatNumber(value);
                 }
               }
             }
@@ -654,7 +631,7 @@
                 }
               },
               ticks: { 
-                callback: value => ' + formatNumber(value),
+                callback: value => '$' + formatNumber(value),
                 color: '#ffffff',
                 font: {
                   size: 12
