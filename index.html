@@ -15,8 +15,8 @@
     async function loadData() {
       // 使用CORS代理来解决跨域问题
       const corsProxy = 'https://api.allorigins.win/get?url=';
-      // 注意：请替换为你的实际API Key，此处的cKlA3lVOMxMjg4hJsC0cn1YAIUu1Hk8P可能已过期或无效
-      const apiUrl = 'https://financialmodelingprep.com/api/v3/historical-price-full/BTCUSD?timeseries=900&apikey=YOUR_FMP_API_KEY'; // <--- 这里请替换为你的API Key
+      // 注意：这里已将API Key恢复为您之前提供的，但请确保其仍然有效。
+      const apiUrl = 'https://financialmodelingprep.com/api/v3/historical-price-full/BTCUSD?timeseries=900&apikey=cKlA3lVOMxMjg4hJsC0cn1YAIUu1Hk8P'; 
       const proxyUrl = corsProxy + encodeURIComponent(apiUrl);
       
       console.log("正在通过CORS代理加载数据:", proxyUrl);
@@ -29,6 +29,11 @@
         }
         
         const proxyData = await response.json();
+        // 检查 proxyData.contents 是否为空或无效
+        if (!proxyData.contents) {
+            console.error("代理返回的contents为空或无效。");
+            throw new Error("代理返回的contents为空。");
+        }
         const data = JSON.parse(proxyData.contents);
         console.log("原始API响应数据:", data);
 
@@ -177,9 +182,8 @@
           const I_prev = prevRow.POSITION;          // 前一日仓位
 
           // 确保所有必要的数据都存在且有效
-          if (D_current != null && B_current != null && F_current !== '未知') { // 简化判断，因为价格趋势都是基于当前日期的MA和价格
+          if (D_current != null && B_current != null && F_current !== '未知') { 
 
-            // *** UPDATED BUY SIGNAL LOGIC ***
             // 买入条件:
             // 1. 前一日属于空仓状态
             // 2. 20均线趋势上升
@@ -188,7 +192,6 @@
               signal = '买入';
             }
             
-            // *** UPDATED SELL SIGNAL LOGIC ***
             // 卖出条件:
             // 1. 前一日属于持仓状态
             // 2. 20均线趋势下降
