@@ -163,7 +163,7 @@
         }
 
         // 从第21个数据点开始生成信号（索引20，因为需要当前和前一天都有MA和趋势）
-        if (index >= 21) {
+        if (index >= 20) {
           const currentRow = row;
           const prevRow = arr[index - 1];
 
@@ -201,23 +201,28 @@
             // 详细调试输出
             if (index >= data.length - 10) {
               const priceVsMA = ((B_current - D_current) / D_current * 100).toFixed(2);
+              const buyThreshold = D_current * 1.01;
+              const sellThreshold = D_current * 0.99;
+              
               console.log(`第${index + 1}天 (${formatDate(currentRow.date)}) 信号分析:`, {
                 价格: B_current.toFixed(2),
                 均线: D_current.toFixed(2),
                 价格相对均线: `${priceVsMA}%`,
                 当前趋势: F_current,
                 前日仓位: I_prev,
+                买入阈值: buyThreshold.toFixed(2),
+                卖出阈值: sellThreshold.toFixed(2),
                 买入条件检查: {
                   空仓: I_prev === '空仓',
                   上升趋势: F_current === '上升',
-                  价格高于均线1pct: B_current > D_current * 1.01,
-                  满足买入: I_prev === '空仓' && F_current === '上升' && B_current > D_current * 1.01
+                  价格高于阈值: B_current > buyThreshold,
+                  满足买入: I_prev === '空仓' && F_current === '上升' && B_current > buyThreshold
                 },
                 卖出条件检查: {
                   持仓: I_prev === '持有',
                   下降趋势: F_current === '下降',
-                  价格低于均线1pct: B_current < D_current * 0.99,
-                  满足卖出: I_prev === '持有' && F_current === '下降' && B_current < D_current * 0.99
+                  价格低于阈值: B_current < sellThreshold,
+                  满足卖出: I_prev === '持有' && F_current === '下降' && B_current < sellThreshold
                 },
                 最终信号: signal || '无'
               });
