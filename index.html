@@ -6,10 +6,83 @@
   <title>BTC交易信号分析</title>
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+    
+    body {
+      font-family: 'Inter', sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+    }
+    
+    .glass-effect {
+      background: rgba(255, 255, 255, 0.25);
+      backdrop-filter: blur(20px);
+      border: 1px solid rgba(255, 255, 255, 0.18);
+      box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+    }
+    
+    .gradient-text {
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    
+    .card-hover {
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    
+    .card-hover:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 20px 40px 0 rgba(31, 38, 135, 0.4);
+    }
+    
+    .pulse-animation {
+      animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+    }
+    
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+    
+    .loading-spinner {
+      animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+      from { transform: rotate(0deg); }
+      to { transform: rotate(360deg); }
+    }
+    
+    .status-indicator {
+      position: relative;
+      display: inline-block;
+    }
+    
+    .status-indicator::before {
+      content: '';
+      position: absolute;
+      top: -2px;
+      left: -2px;
+      right: -2px;
+      bottom: -2px;
+      border-radius: 50%;
+      background: linear-gradient(45deg, #10b981, #34d399);
+      z-index: -1;
+      animation: glow 2s ease-in-out infinite alternate;
+    }
+    
+    @keyframes glow {
+      from { box-shadow: 0 0 10px rgba(16, 185, 129, 0.5); }
+      to { box-shadow: 0 0 20px rgba(16, 185, 129, 0.8); }
+    }
+  </style>
 </head>
-<body class="bg-gray-100 font-sans">
+<body>
 
-  <div id="root" class="max-w-4xl mx-auto p-4"></div>
+  <div id="root" class="max-w-7xl mx-auto p-6"></div>
 
   <script>
     async function loadData() {
@@ -153,13 +226,13 @@
       console.log("开始生成交易信号，数据长度:", data.length);
       
       const dataWithSignals = data.map((row, index, arr) => {
-        // 初始化信号和仓位
+        // 初始化信号
         let signal = '';
         let currentPosition = '空仓'; // 默认初始仓位
         
         // 如果不是第一行，继承前一行的仓位状态
-        if (index > 0 && arr[index - 1].POSITION) {
-          currentPosition = arr[index - 1].POSITION;
+        if (index > 0) {
+          currentPosition = arr[index - 1].POSITION || '空仓';
         }
         
         // 从第20个数据点开始生成信号（索引19，需要有20日均线数据）
@@ -263,16 +336,23 @@
 
     async function renderDashboard() {
       const root = document.getElementById('root');
-      root.innerHTML = '<div class="text-center text-xl text-gray-600 mt-10">📊 正在加载数据...</div>';
+      root.innerHTML = `
+        <div class="glass-effect rounded-3xl p-8 text-center">
+          <div class="loading-spinner w-16 h-16 border-4 border-white border-t-transparent rounded-full mx-auto mb-6"></div>
+          <h2 class="text-2xl font-bold text-white mb-2">正在加载数据...</h2>
+          <p class="text-white text-opacity-80">请稍候，正在获取最新的BTC交易数据</p>
+        </div>
+      `;
       console.log("开始渲染仪表板。");
 
       const rawData = await loadData();
       if (rawData.length < 20) {
         root.innerHTML = `
-          <div class="text-center text-red-600 mt-10">
-            <h2 class="text-2xl font-bold mb-4">⚠️ 数据不足</h2>
-            <p>无法加载足够数据进行分析。需要至少20天的数据，当前只有 ${rawData.length} 天。</p>
-            <p class="mt-2">请检查API密钥、API服务状态或稍后再试。</p>
+          <div class="glass-effect rounded-3xl p-8 text-center">
+            <div class="text-6xl mb-4">⚠️</div>
+            <h2 class="text-2xl font-bold text-white mb-4">数据不足</h2>
+            <p class="text-white text-opacity-80">无法加载足够数据进行分析。需要至少20天的数据，当前只有 ${rawData.length} 天。</p>
+            <p class="text-white text-opacity-60 mt-2">请检查API密钥、API服务状态或稍后再试。</p>
           </div>
         `;
         console.error(`数据不足进行分析: 找到${rawData.length}天数据，需要20天。`);
@@ -282,7 +362,7 @@
       const dataWithMA = calculateIndicators(rawData);
       const dataWithSignals = generateSignals(dataWithMA);
 
-      // 获取最新数据 - 修复当前交易建议显示
+      // 获取最新数据
       const latest = dataWithSignals[dataWithSignals.length - 1] || {};
       const currentPosition = latest.POSITION || '未知';
       console.log(`获取最新数据: 最后一天是 ${formatDate(latest.date)}, 仓位: ${currentPosition}, 信号: ${latest.Signal || '无'}`);
@@ -310,98 +390,133 @@
       const sellSignals = dataWithSignals.filter(r => r.Signal === '卖出').length;
 
       root.innerHTML = `
-        <div class="bg-white shadow-xl rounded-lg p-8">
-          <h1 class="text-3xl font-bold text-blue-600 mb-6 flex items-center">
-            📊 BTC交易信号分析系统
-            <span class="ml-4 text-sm text-gray-500 font-normal">实时更新</span>
-          </h1>
+        <div class="glass-effect rounded-3xl p-8 mb-6">
+          <div class="text-center mb-8">
+            <h1 class="text-4xl font-bold gradient-text mb-4 flex items-center justify-center">
+              <span class="text-5xl mr-4">₿</span>
+              BTC智能交易分析系统
+              <div class="status-indicator ml-4">
+                <div class="w-3 h-3 bg-green-500 rounded-full pulse-animation"></div>
+              </div>
+            </h1>
+            <p class="text-white text-opacity-80 text-lg">基于20日均线的专业级交易信号分析</p>
+          </div>
 
           <div class="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <div class="bg-gradient-to-r from-blue-50 to-blue-100 rounded-lg p-4">
-              <h2 class="text-lg font-semibold text-gray-700 mb-2">🎯 当前交易建议</h2>
-              <p class="text-2xl font-bold ${currentPosition === '持有' ? 'text-green-600' : currentPosition === '空仓' ? 'text-red-600' : 'text-gray-500'}">${currentPosition}</p>
+            <div class="glass-effect rounded-2xl p-6 card-hover">
+              <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-semibold text-white">🎯 交易建议</h2>
+                <div class="w-3 h-3 ${currentPosition === '持有' ? 'bg-green-400' : 'bg-red-400'} rounded-full pulse-animation"></div>
+              </div>
+              <p class="text-3xl font-bold ${currentPosition === '持有' ? 'text-green-400' : 'text-red-400'} mb-2">${currentPosition}</p>
+              <p class="text-white text-opacity-60 text-sm">基于技术指标分析</p>
             </div>
 
-            <div class="bg-gradient-to-r from-green-50 to-green-100 rounded-lg p-4">
-              <h2 class="text-lg font-semibold text-gray-700 mb-2">💰 当前价格</h2>
-              <p class="text-2xl font-bold text-green-600">$${formatNumber(latestPrice)}</p>
-              <p class="text-gray-600">24h变化: ${latestChange}%</p>
+            <div class="glass-effect rounded-2xl p-6 card-hover">
+              <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-semibold text-white">💰 当前价格</h2>
+                <span class="text-2xl">💎</span>
+              </div>
+              <p class="text-3xl font-bold text-yellow-400 mb-2">$${formatNumber(latestPrice)}</p>
+              <p class="text-white text-opacity-80 text-sm flex items-center">
+                <span class="mr-2">${latestChange >= 0 ? '📈' : '📉'}</span>
+                24h: ${latestChange}%
+              </p>
             </div>
 
-            <div class="bg-gradient-to-r from-yellow-50 to-yellow-100 rounded-lg p-4">
-              <h2 class="text-lg font-semibold text-gray-700 mb-2">📈 20日均线</h2>
-              <p class="text-xl font-bold text-yellow-600">$${formatNumber(latest20MA)}</p>
-              <p class="text-gray-600">趋势: ${latestTrend}</p>
-              <p class="text-gray-600">位置: ${pricePosition}</p>
+            <div class="glass-effect rounded-2xl p-6 card-hover">
+              <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-semibold text-white">📈 20日均线</h2>
+                <span class="text-2xl">${latestTrend === '上升' ? '🚀' : '📉'}</span>
+              </div>
+              <p class="text-2xl font-bold text-blue-400 mb-2">$${formatNumber(latest20MA)}</p>
+              <p class="text-white text-opacity-80 text-sm">趋势: ${latestTrend}</p>
+              <p class="text-white text-opacity-60 text-xs">${pricePosition}</p>
             </div>
 
-            <div class="bg-gradient-to-r from-purple-50 to-purple-100 rounded-lg p-4">
-              <h2 class="text-lg font-semibold text-gray-700 mb-2">📊 信号统计</h2>
-              <p class="text-sm text-gray-600">总信号: ${totalSignals}</p>
-              <p class="text-sm text-green-600">买入: ${buySignals}</p>
-              <p class="text-sm text-red-600">卖出: ${sellSignals}</p>
+            <div class="glass-effect rounded-2xl p-6 card-hover">
+              <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-semibold text-white">📊 信号统计</h2>
+                <span class="text-2xl">📈</span>
+              </div>
+              <p class="text-white text-opacity-80 text-sm mb-1">总信号: <span class="font-bold">${totalSignals}</span></p>
+              <p class="text-green-400 text-sm mb-1">买入: <span class="font-bold">${buySignals}</span></p>
+              <p class="text-red-400 text-sm">卖出: <span class="font-bold">${sellSignals}</span></p>
             </div>
           </div>
 
           <div class="grid md:grid-cols-2 gap-6 mb-8">
-            <div class="bg-gray-50 rounded-lg p-4">
-              <h2 class="text-lg font-semibold text-gray-700 mb-4">🔍 最近交易信号</h2>
-              <div class="space-y-2">
+            <div class="glass-effect rounded-2xl p-6">
+              <h2 class="text-xl font-semibold text-white mb-6 flex items-center">
+                <span class="mr-3">🔍</span>最近交易信号
+              </h2>
+              <div class="space-y-3">
                 ${recentSignals.length > 0 ? recentSignals.map(s => `
-                  <div class="flex justify-between items-center border-b py-2">
-                    <span class="text-gray-600">${formatDate(s.date)}</span>
-                    <span class="px-2 py-1 rounded text-sm font-medium ${s.Signal === '买入' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}">${s.Signal}</span>
-                    <span class="font-mono text-sm">$${formatNumber(s.price)}</span>
+                  <div class="glass-effect rounded-xl p-4 flex justify-between items-center">
+                    <span class="text-white text-opacity-80">${formatDate(s.date)}</span>
+                    <span class="px-3 py-1 rounded-full text-sm font-medium ${s.Signal === '买入' ? 'bg-green-500 bg-opacity-20 text-green-400 border border-green-400' : 'bg-red-500 bg-opacity-20 text-red-400 border border-red-400'}">${s.Signal}</span>
+                    <span class="font-mono text-white font-bold">$${formatNumber(s.price)}</span>
                   </div>
-                `).join('') : '<div class="text-gray-500 text-center py-4">暂无近期交易信号</div>'}
+                `).join('') : '<div class="text-white text-opacity-60 text-center py-8">暂无近期交易信号</div>'}
               </div>
             </div>
 
-            <div class="bg-gray-50 rounded-lg p-4">
-              <h2 class="text-lg font-semibold text-gray-700 mb-4">📋 交易逻辑说明</h2>
-              <div class="text-sm text-gray-600 space-y-3">
-                <div>
-                  <p><strong>买入条件（三个条件同时满足）:</strong></p>
-                  <ul class="list-decimal list-inside ml-2 space-y-1">
-                    <li>当前属于空仓状态</li>
-                    <li>20均线趋势上升</li>
-                    <li>价格高于均线1%以上</li>
+            <div class="glass-effect rounded-2xl p-6">
+              <h2 class="text-xl font-semibold text-white mb-6 flex items-center">
+                <span class="mr-3">📋</span>交易逻辑说明
+              </h2>
+              <div class="text-sm text-white text-opacity-80 space-y-4">
+                <div class="glass-effect rounded-xl p-4">
+                  <p class="font-semibold text-green-400 mb-3">🟢 买入条件（三项同时满足）:</p>
+                  <ul class="space-y-2 ml-4">
+                    <li class="flex items-center"><span class="mr-2">•</span> 前一日为空仓状态</li>
+                    <li class="flex items-center"><span class="mr-2">•</span> 20日均线趋势上升</li>
+                    <li class="flex items-center"><span class="mr-2">•</span> 价格高于均线1%以上</li>
                   </ul>
                 </div>
-                <div>
-                  <p><strong>卖出条件（三个条件同时满足）:</strong></p>
-                  <ul class="list-decimal list-inside ml-2 space-y-1">
-                    <li>当前属于持仓状态</li>
-                    <li>20均线趋势下降</li>
-                    <li>价格低于均线1%以上</li>
+                <div class="glass-effect rounded-xl p-4">
+                  <p class="font-semibold text-red-400 mb-3">🔴 卖出条件（三项同时满足）:</p>
+                  <ul class="space-y-2 ml-4">
+                    <li class="flex items-center"><span class="mr-2">•</span> 前一日为持仓状态</li>
+                    <li class="flex items-center"><span class="mr-2">•</span> 20日均线趋势下降</li>
+                    <li class="flex items-center"><span class="mr-2">•</span> 价格低于均线1%以上</li>
                   </ul>
                 </div>
-                <div class="mt-3 p-2 bg-blue-50 rounded">
-                  <p class="text-xs text-blue-700">
-                    <strong>注意：</strong>买入后立即转为"持有"状态，卖出后立即转为"空仓"状态。仓位状态会持续到下一个相反信号出现。
+                <div class="glass-effect rounded-xl p-3 bg-blue-500 bg-opacity-20 border border-blue-400">
+                  <p class="text-xs text-blue-300">
+                    <strong>💡 智能提示：</strong>信号触发后仓位状态立即改变，并持续到下一个相反信号出现。
                   </p>
                 </div>
               </div>
             </div>
           </div>
 
-          <div class="mb-6">
-            <h2 class="text-lg font-semibold text-gray-700 mb-4">📈 价格走势图</h2>
-            <div class="bg-white rounded-lg">
+          <div class="glass-effect rounded-2xl p-6 mb-6">
+            <h2 class="text-xl font-semibold text-white mb-6 flex items-center">
+              <span class="mr-3">📈</span>价格走势图
+            </h2>
+            <div class="bg-white bg-opacity-10 rounded-xl p-4">
               <canvas id="chart" height="100"></canvas>
             </div>
           </div>
 
           <div class="text-center">
-            <p class="text-gray-500 text-xs">
-              ⚠️ 本分析仅供参考，投资有风险，决策需谨慎。最后更新时间: ${new Date().toLocaleString('zh-CN')}
-            </p>
-            <button onclick="window.showDebugInfo()" class="mt-2 px-4 py-2 bg-blue-500 text-white rounded text-xs hover:bg-blue-600">
-              显示调试信息
-            </button>
-            <div id="debugInfo" class="hidden mt-4 p-4 bg-gray-100 rounded text-left text-xs">
-              <h3 class="font-bold mb-2">调试信息：</h3>
-              <div id="debugContent"></div>
+            <div class="glass-effect rounded-2xl p-6 mb-4">
+              <p class="text-white text-opacity-80 text-sm mb-3">
+                ⚠️ 本分析仅供参考，投资有风险，决策需谨慎
+              </p>
+              <p class="text-white text-opacity-60 text-xs mb-4">
+                最后更新时间: ${new Date().toLocaleString('zh-CN')} | 数据来源: 实时API
+              </p>
+              <button onclick="window.showDebugInfo()" class="px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-xl font-medium hover:from-purple-600 hover:to-pink-600 transition-all duration-300 transform hover:scale-105">
+                🔧 显示调试信息
+              </button>
+            </div>
+            <div id="debugInfo" class="hidden glass-effect rounded-2xl p-6 text-left text-sm">
+              <h3 class="font-bold text-white mb-4 flex items-center">
+                <span class="mr-2">🐛</span>调试信息
+              </h3>
+              <div id="debugContent" class="text-white text-opacity-80"></div>
             </div>
           </div>
         </div>
@@ -412,8 +527,6 @@
       
       // 准备图表数据 - 只显示最近60天的数据以提高性能
       const chartData = dataWithSignals.slice(-60);
-      const buyPoints = chartData.filter(r => r.Signal === '买入');
-      const sellPoints = chartData.filter(r => r.Signal === '卖出');
 
       new Chart(ctx, {
         type: 'line',
@@ -423,24 +536,28 @@
             {
               label: 'BTC价格',
               data: chartData.map(r => r.price),
-              borderColor: '#3B82F6',
-              backgroundColor: 'rgba(59, 130, 246, 0.1)',
-              borderWidth: 2,
-              tension: 0.1,
-              fill: false,
-              pointRadius: 1,
-              pointHoverRadius: 5
+              borderColor: '#60A5FA',
+              backgroundColor: 'rgba(96, 165, 250, 0.1)',
+              borderWidth: 3,
+              tension: 0.2,
+              fill: true,
+              pointRadius: 2,
+              pointHoverRadius: 6,
+              pointBackgroundColor: '#60A5FA',
+              pointBorderColor: '#ffffff',
+              pointBorderWidth: 2
             },
             {
               label: '20日均线',
               data: chartData.map(r => r.BTC20MA),
-              borderColor: '#F59E0B',
-              backgroundColor: 'rgba(245, 158, 11, 0.1)',
+              borderColor: '#FBBF24',
+              backgroundColor: 'rgba(251, 191, 36, 0.1)',
               borderWidth: 2,
-              tension: 0.1,
+              tension: 0.2,
               fill: false,
               pointRadius: 1,
-              pointHoverRadius: 5
+              pointHoverRadius: 4,
+              pointBackgroundColor: '#FBBF24'
             },
             {
               label: '买入信号',
@@ -449,10 +566,10 @@
               backgroundColor: '#10B981',
               pointBackgroundColor: '#10B981',
               pointBorderColor: '#ffffff',
-              pointRadius: 6,
-              pointHoverRadius: 8,
+              pointRadius: 8,
+              pointHoverRadius: 10,
               showLine: false,
-              tension: 0
+              pointBorderWidth: 3
             },
             {
               label: '卖出信号',
@@ -461,10 +578,10 @@
               backgroundColor: '#EF4444',
               pointBackgroundColor: '#EF4444',
               pointBorderColor: '#ffffff',
-              pointRadius: 6,
-              pointHoverRadius: 8,
+              pointRadius: 8,
+              pointHoverRadius: 10,
               showLine: false,
-              tension: 0
+              pointBorderWidth: 3
             }
           ]
         },
@@ -472,16 +589,33 @@
           responsive: true,
           maintainAspectRatio: false,
           plugins: { 
-            legend: { position: 'top' },
+            legend: { 
+              position: 'top',
+              labels: {
+                color: '#ffffff',
+                font: {
+                  size: 14,
+                  weight: '500'
+                },
+                usePointStyle: true,
+                padding: 20
+              }
+            },
             tooltip: {
               mode: 'index',
               intersect: false,
+              backgroundColor: 'rgba(0, 0, 0, 0.8)',
+              titleColor: '#ffffff',
+              bodyColor: '#ffffff',
+              borderColor: 'rgba(255, 255, 255, 0.3)',
+              borderWidth: 1,
+              cornerRadius: 12,
               callbacks: {
                 label: function(context) {
                   if (context.dataset.label.includes('信号')) {
-                    return context.dataset.label + ': $' + formatNumber(context.parsed.y);
+                    return context.dataset.label + ':  + formatNumber(context.parsed.y);
                   }
-                  return context.dataset.label + ': $' + formatNumber(context.parsed.y);
+                  return context.dataset.label + ':  + formatNumber(context.parsed.y);
                 }
               }
             }
@@ -491,17 +625,43 @@
               display: true,
               title: {
                 display: true,
-                text: '日期'
+                text: '日期',
+                color: '#ffffff',
+                font: {
+                  size: 14,
+                  weight: '500'
+                }
+              },
+              ticks: {
+                color: '#ffffff',
+                font: {
+                  size: 12
+                }
+              },
+              grid: {
+                color: 'rgba(255, 255, 255, 0.1)'
               }
             },
             y: {
               display: true,
               title: {
                 display: true,
-                text: '价格 (USD)'
+                text: '价格 (USD)',
+                color: '#ffffff',
+                font: {
+                  size: 14,
+                  weight: '500'
+                }
               },
               ticks: { 
-                callback: value => '$' + formatNumber(value)
+                callback: value => ' + formatNumber(value),
+                color: '#ffffff',
+                font: {
+                  size: 12
+                }
+              },
+              grid: {
+                color: 'rgba(255, 255, 255, 0.1)'
               }
             }
           },
@@ -524,26 +684,42 @@
           debugDiv.classList.remove('hidden');
           
           const lastData = dataWithSignals.slice(-10);
-          let debugHTML = '<p><strong>最后10天数据分析：</strong></p>';
+          let debugHTML = '<div class="mb-4"><strong class="text-yellow-400">最后10天数据分析：</strong></div>';
           
           lastData.forEach((item, idx) => {
             const actualIndex = dataWithSignals.length - 10 + idx;
             debugHTML += `
-              <div class="mb-2 p-2 border rounded">
-                <strong>第${actualIndex + 1}天 (${formatDate(item.date)}):</strong><br>
-                价格: ${formatNumber(item.price)}<br>
-                20日均线: ${item.BTC20MA ? formatNumber(item.BTC20MA) : 'N/A'}<br>
-                趋势: ${item.BTC20MAtrend}<br>
-                信号: ${item.Signal || '无'}<br>
-                仓位: ${item.POSITION}
+              <div class="mb-3 p-4 glass-effect rounded-xl border border-white border-opacity-20">
+                <div class="flex justify-between items-center mb-2">
+                  <strong class="text-blue-400">第${actualIndex + 1}天 (${formatDate(item.date)})</strong>
+                  <span class="px-2 py-1 rounded-lg text-xs ${item.Signal ? (item.Signal === '买入' ? 'bg-green-500 bg-opacity-20 text-green-400' : 'bg-red-500 bg-opacity-20 text-red-400') : 'bg-gray-500 bg-opacity-20 text-gray-400'}">${item.Signal || '无信号'}</span>
+                </div>
+                <div class="grid grid-cols-2 gap-2 text-sm">
+                  <div>价格: <span class="text-yellow-400 font-mono">${formatNumber(item.price)}</span></div>
+                  <div>20日均线: <span class="text-blue-400 font-mono">${item.BTC20MA ? formatNumber(item.BTC20MA) : 'N/A'}</span></div>
+                  <div>趋势: <span class="text-purple-400">${item.BTC20MAtrend}</span></div>
+                  <div>仓位: <span class="${item.POSITION === '持有' ? 'text-green-400' : 'text-red-400'} font-bold">${item.POSITION}</span></div>
+                </div>
               </div>
             `;
           });
           
-          debugHTML += `<p class="mt-4"><strong>总数据量:</strong> ${dataWithSignals.length} 天</p>`;
-          debugHTML += `<p><strong>有效均线数据:</strong> ${dataWithSignals.filter(r => r.BTC20MA != null).length} 天</p>`;
-          debugHTML += `<p><strong>有趋势数据:</strong> ${dataWithSignals.filter(r => r.BTC20MAtrend !== '未知').length} 天</p>`;
-          debugHTML += `<p><strong>总交易信号:</strong> ${dataWithSignals.filter(r => r.Signal && r.Signal !== '').length} 个</p>`;
+          debugHTML += `
+            <div class="mt-6 grid grid-cols-2 gap-4 text-sm">
+              <div class="glass-effect rounded-xl p-4">
+                <div class="text-yellow-400 font-bold mb-2">数据统计</div>
+                <div>总数据量: <span class="text-white font-bold">${dataWithSignals.length}</span> 天</div>
+                <div>有效均线: <span class="text-white font-bold">${dataWithSignals.filter(r => r.BTC20MA != null).length}</span> 天</div>
+                <div>有趋势数据: <span class="text-white font-bold">${dataWithSignals.filter(r => r.BTC20MAtrend !== '未知').length}</span> 天</div>
+              </div>
+              <div class="glass-effect rounded-xl p-4">
+                <div class="text-yellow-400 font-bold mb-2">信号统计</div>
+                <div>总交易信号: <span class="text-white font-bold">${dataWithSignals.filter(r => r.Signal && r.Signal !== '').length}</span> 个</div>
+                <div>买入信号: <span class="text-green-400 font-bold">${dataWithSignals.filter(r => r.Signal === '买入').length}</span> 个</div>
+                <div>卖出信号: <span class="text-red-400 font-bold">${dataWithSignals.filter(r => r.Signal === '卖出').length}</span> 个</div>
+              </div>
+            </div>
+          `;
           
           debugContent.innerHTML = debugHTML;
         } else {
