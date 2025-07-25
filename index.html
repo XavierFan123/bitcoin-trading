@@ -207,95 +207,80 @@
         return { ...row, BTC20MAtrend };
       });
       
-      // 详细日志
-      const validMACount = dataWithIndicators.filter(r => r.BTC20MA != null).length;
-      const validTrendCount = dataWithIndicators.filter(r => r.BTC20MAtrend !== '未知').length;
-      
-      console.log(`MA计算结果: ${validMACount}个有效MA值, ${validTrendCount}个有效趋势值`);
-      console.log("最后5个数据点:", dataWithIndicators.slice(-5).map(r => ({
-        date: r.date.toLocaleDateString(),
-        price: r.price,
-        ma: r.BTC20MA ? r.BTC20MA.toFixed(2) : null,
-        trend: r.BTC20MAtrend
-      })));
-      
       return dataWithIndicators;
     }
 
     function generateSignals(data) {
-      console.log("开始生成交易信号，数据长度:", data.length);
-      
-      const dataWithSignals = data.map((row, index, arr) => {
-        // 初始化信号
-        let signal = '';
-        let currentPosition = '空仓'; // 默认初始仓位
-        
-        // 如果不是第一行，继承前一行的仓位状态
-        if (index > 0) {
-          currentPosition = arr[index - 1].POSITION || '空仓';
-        }
-        
-        // 从第20个数据点开始生成信号（索引19，需要有20日均线数据）
-        if (index >= 19 && row.BTC20MA != null && row.BTC20MAtrend !== '未知') {
-          // 当前行数据
-          const currentPrice = parseFloat(row.price);
-          const currentMA = parseFloat(row.BTC20MA);
-          const currentTrend = row.BTC20MAtrend;
-          
-          // 前一天的仓位状态
-          const prevPosition = currentPosition;
+        console.log("开始生成交易信号，数据长度:", data.length);
 
-          // 确保数据有效性
-          if (currentPrice && currentMA && currentTrend) {
+        // 使用 .reduce 来正确处理依赖前一天计算结果的逻辑
+        const dataWithSignals = data.reduce((accumulator, currentRow, index) => {
+            let signal = '';
             
-            // 计算阈值
-            const buyThreshold = currentMA * 1.01;  // 均线上方1%
-            const sellThreshold = currentMA * 0.99; // 均线下方1%
+            // 从accumulator中获取前一天的正确仓位状态，accumulator是我们正在建立的结果数组
+            const prevPosition = index > 0 ? accumulator[index - 1].POSITION : '空仓';
             
-            // 买入条件检查（三个条件同时满足）
-            const condition1_buy = prevPosition === '空仓';
-            const condition2_buy = currentTrend === '上升';
-            const condition3_buy = currentPrice > buyThreshold;
-            
-            if (condition1_buy && condition2_buy && condition3_buy) {
-              signal = '买入';
-              currentPosition = '持有'; // 买入后立即转为持有
-            }
-            
-            // 卖出条件检查（三个条件同时满足）
-            const condition1_sell = prevPosition === '持有';
-            const condition2_sell = currentTrend === '下降';
-            const condition3_sell = currentPrice < sellThreshold;
-            
-            if (condition1_sell && condition2_sell && condition3_sell) {
-              signal = '卖出';
-              currentPosition = '空仓'; // 卖出后立即转为空仓
-            }
-          }
-        }
+            // 默认情况下，今天的仓位继承自昨天
+            let currentPosition = prevPosition;
 
-        return { 
-          ...row, 
-          Signal: signal, 
-          POSITION: currentPosition 
-        };
-      });
-      
-      // 统计信号
-      const allSignals = dataWithSignals.filter(r => r.Signal && r.Signal !== '');
-      const buySignals = dataWithSignals.filter(r => r.Signal === '买入');
-      const sellSignals = dataWithSignals.filter(r => r.Signal === '卖出');
-      
-      console.log(`信号生成完成：`);
-      console.log(`- 总交易信号: ${allSignals.length} 个`);
-      console.log(`- 买入信号: ${buySignals.length} 个`);
-      console.log(`- 卖出信号: ${sellSignals.length} 个`);
-      
-      // 获取最终仓位状态
-      const finalPosition = dataWithSignals.length > 0 ? dataWithSignals[dataWithSignals.length - 1].POSITION : '未知';
-      console.log(`- 最终仓位状态: ${finalPosition}`);
-      
-      return dataWithSignals;
+            // 从第20个数据点开始（索引为19），我们有足够的数据来计算信号
+            if (index >= 19 && currentRow.BTC20MA != null && currentRow.BTC20MAtrend !== '未知') {
+                const currentPrice = parseFloat(currentRow.price);
+                const currentMA = parseFloat(currentRow.BTC20MA);
+                const currentTrend = currentRow.BTC20MAtrend;
+
+                if (currentPrice && currentMA && currentTrend) {
+                    const buyThreshold = currentMA * 1.01;  // 均线上方1%
+                    const sellThreshold = currentMA * 0.99; // 均线下方1%
+                    
+                    // 买入条件检查（三个条件同时满足）
+                    const condition1_buy = prevPosition === '空仓';
+                    const condition2_buy = currentTrend === '上升';
+                    const condition3_buy = currentPrice > buyThreshold;
+                    
+                    if (condition1_buy && condition2_buy && condition3_buy) {
+                        signal = '买入';
+                        currentPosition = '持有'; // 买入后，今日仓位转为'持有'
+                    }
+                    
+                    // 卖出条件检查（三个条件同时满足）
+                    const condition1_sell = prevPosition === '持有';
+                    const condition2_sell = currentTrend === '下降';
+                    const condition3_sell = currentPrice < sellThreshold;
+                    
+                    if (condition1_sell && condition2_sell && condition3_sell) {
+                        signal = '卖出';
+                        currentPosition = '空仓'; // 卖出后，今日仓位转为'空仓'
+                    }
+                }
+            }
+
+            // 将计算好的当前行数据（包括信号和正确的仓位）添加到结果数组中
+            accumulator.push({ 
+                ...currentRow, 
+                Signal: signal, 
+                POSITION: currentPosition 
+            });
+
+            // 返回更新后的结果数组，供下一次迭代使用
+            return accumulator;
+        }, []); // 初始值是一个空数组
+
+        // 统计信号
+        const allSignals = dataWithSignals.filter(r => r.Signal && r.Signal !== '');
+        const buySignals = dataWithSignals.filter(r => r.Signal === '买入');
+        const sellSignals = dataWithSignals.filter(r => r.Signal === '卖出');
+        
+        console.log(`信号生成完成：`);
+        console.log(`- 总交易信号: ${allSignals.length} 个`);
+        console.log(`- 买入信号: ${buySignals.length} 个`);
+        console.log(`- 卖出信号: ${sellSignals.length} 个`);
+        
+        // 获取最终仓位状态
+        const finalPosition = dataWithSignals.length > 0 ? dataWithSignals[dataWithSignals.length - 1].POSITION : '未知';
+        console.log(`- 最终仓位状态: ${finalPosition}`);
+
+        return dataWithSignals;
     }
 
     function formatNumber(num) {
@@ -340,7 +325,7 @@
       // 获取最新数据
       const latest = dataWithSignals[dataWithSignals.length - 1] || {};
       const currentPosition = latest.POSITION || '未知';
-      console.log(`获取最新数据: 最后一天是 ${formatDate(latest.date)}, 仓位: ${currentPosition}, 信号: ${latest.Signal || '无'}`);
+      console.log(`获取最新数据: 最后一天是 ${latest.date ? formatDate(latest.date) : 'N/A'}, 仓位: ${currentPosition}, 信号: ${latest.Signal || '无'}`);
       
       const latestPrice = latest.price || 0;
       const latestChange = dataWithSignals.length > 1 && dataWithSignals[dataWithSignals.length - 2].price !== 0
