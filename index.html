@@ -15,7 +15,8 @@
     async function loadData() {
       // 使用CORS代理来解决跨域问题
       const corsProxy = 'https://api.allorigins.win/get?url=';
-      const apiUrl = 'https://financialmodelingprep.com/api/v3/historical-price-full/BTCUSD?timeseries=900&apikey=cKlA3lVOMxMjg4hJsC0cn1YAIUu1Hk8P';
+      // 注意：请替换为你的实际API Key，此处的cKlA3lVOMxMjg4hJsC0cn1YAIUu1Hk8P可能已过期或无效
+      const apiUrl = 'https://financialmodelingprep.com/api/v3/historical-price-full/BTCUSD?timeseries=900&apikey=YOUR_FMP_API_KEY'; // <--- 这里请替换为你的API Key
       const proxyUrl = corsProxy + encodeURIComponent(apiUrl);
       
       console.log("正在通过CORS代理加载数据:", proxyUrl);
@@ -168,47 +169,32 @@
           const prevRow = arr[index - 1];
 
           // 当前行数据
-          const B_current = currentRow.price;       // 当前价格
-          const D_current = currentRow.BTC20MA;     // 当前20日均线
+          const B_current = currentRow.price;      // 当前价格
+          const D_current = currentRow.BTC20MA;    // 当前20日均线
           const F_current = currentRow.BTC20MAtrend; // 当前趋势
 
           // 前一行数据
-          const B_prev = prevRow.price;             // 前一日价格
-          const D_prev = prevRow.BTC20MA;           // 前一日20日均线
-          const F_prev = prevRow.BTC20MAtrend;      // 前一日趋势
           const I_prev = prevRow.POSITION;          // 前一日仓位
 
           // 确保所有必要的数据都存在且有效
-          if (D_current != null && B_current != null && 
-              D_prev != null && B_prev != null && 
-              F_current !== '未知' && F_prev !== '未知') {
+          if (D_current != null && B_current != null && F_current !== '未知') { // 简化判断，因为价格趋势都是基于当前日期的MA和价格
 
-            // 买入信号逻辑
-            // 必要条件：20均线趋势上升
-            if (F_current === '上升') {
-              // 条件1：价格突破均线1%以上，且前日低于均线
-              const buyCondition1 = B_current > D_current * (1 + 0.01) && B_prev <= D_prev;
-              
-              // 条件2：空仓时价格本高于均线，但20均线由下降趋势转为上升
-              const buyCondition2 = I_prev === '空仓' && B_current > D_current && F_prev === '下降';
-              
-              if (buyCondition1 || buyCondition2) {
-                signal = '买入';
-              }
+            // *** UPDATED BUY SIGNAL LOGIC ***
+            // 买入条件:
+            // 1. 前一日属于空仓状态
+            // 2. 20均线趋势上升
+            // 3. 价格高于均线1%以上
+            if (I_prev === '空仓' && F_current === '上升' && B_current > D_current * (1 + 0.01)) {
+              signal = '买入';
             }
             
-            // 卖出信号逻辑
-            // 必要条件：20均线趋势下降
-            if (F_current === '下降') {
-              // 条件1：价格跌破均线1%以上，且前日高于均线
-              const sellCondition1 = B_current < D_current * (1 - 0.01) && B_prev >= D_prev;
-              
-              // 条件2：持仓时价格本低于均线，但20均线由上升趋势转为下降
-              const sellCondition2 = I_prev === '持有' && B_current < D_current && F_prev === '上升';
-              
-              if (sellCondition1 || sellCondition2) {
-                signal = '卖出';
-              }
+            // *** UPDATED SELL SIGNAL LOGIC ***
+            // 卖出条件:
+            // 1. 前一日属于持仓状态
+            // 2. 20均线趋势下降
+            // 3. 价格低于均线1%以上
+            else if (I_prev === '持有' && F_current === '下降' && B_current < D_current * (1 - 0.01)) {
+              signal = '卖出';
             }
 
             // 调试输出（仅对最后几个数据点）
@@ -218,9 +204,7 @@
                 价格: B_current.toFixed(2),
                 均线: D_current.toFixed(2),
                 当前趋势: F_current,
-                前日趋势: F_prev,
                 前日仓位: I_prev,
-                价格相对均线: B_current > D_current ? '高于' : '低于',
                 信号: signal || '无'
               });
             }
@@ -352,21 +336,19 @@
               <h2 class="text-lg font-semibold text-gray-700 mb-4">📋 交易逻辑说明</h2>
               <div class="text-sm text-gray-600 space-y-3">
                 <div>
-                  <p><strong>买入条件:</strong></p>
-                  <p class="ml-2 mb-1"><strong>必要条件：</strong>20均线趋势上升</p>
-                  <p class="ml-2 mb-1"><strong>并且符合以下任一条件：</strong></p>
+                  <p><strong>买入条件 (三者同时满足):</strong></p>
                   <ul class="list-disc list-inside ml-4 space-y-1">
-                    <li>价格突破均线1%以上，且前日低于均线</li>
-                    <li>或空仓时价格本高于均线，但20均线由下降趋势转为上升</li>
+                    <li>前一日处于空仓状态</li>
+                    <li>20日均线趋势上升</li>
+                    <li>当前价格高于20日均线1%以上</li>
                   </ul>
                 </div>
                 <div>
-                  <p><strong>卖出条件:</strong></p>
-                  <p class="ml-2 mb-1"><strong>必要条件：</strong>20均线趋势下降</p>
-                  <p class="ml-2 mb-1"><strong>并且符合以下任一条件：</strong></p>
+                  <p><strong>卖出条件 (三者同时满足):</strong></p>
                   <ul class="list-disc list-inside ml-4 space-y-1">
-                    <li>价格跌破均线1%以上，且前日高于均线</li>
-                    <li>或持仓时价格本低于均线，但20均线由上升趋势转为下降</li>
+                    <li>前一日处于持仓状态</li>
+                    <li>20日均线趋势下降</li>
+                    <li>当前价格低于20日均线1%以上</li>
                   </ul>
                 </div>
               </div>
